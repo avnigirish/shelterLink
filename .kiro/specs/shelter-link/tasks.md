@@ -32,7 +32,7 @@ Incremental implementation across 8 phases: infrastructure → Lambda processor 
     - Scope SNS/SQS permissions to specific resource ARNs
     - _Requirements: 5.2_
 
-  - [ ]* 1.5 Write CDK unit tests for stack resource assertions
+  - [x] 1.5 Write CDK unit tests for stack resource assertions
     - Assert DynamoDB table exists with correct key schema and stream enabled
     - Assert SQS DLQ is wired to main queue
     - _Requirements: 5.1_
@@ -51,7 +51,7 @@ Incremental implementation across 8 phases: infrastructure → Lambda processor 
     - Assign default priority `MEDIUM` when need item omits priority
     - _Requirements: 1.4, 1.5, 3.2, 3.3_
 
-  - [ ]* 2.3 Write property-based test for Parser round-trip invariant
+  - [x] 2.3 Write property-based test for Parser round-trip invariant
     - **Property 1: Round-trip consistency — parse(prettyPrint(parse(sms))) produces equivalent CapacityRecord**
     - **Validates: Requirements 1.6**
     - Use `@fast-check/vitest` or `fast-check` with Vitest
@@ -62,7 +62,7 @@ Incremental implementation across 8 phases: infrastructure → Lambda processor 
     - Format error reply with example correct format
     - _Requirements: 1.3, 1.4_
 
-  - [ ]* 2.5 Write unit tests for Parser and Pretty_Printer
+  - [x] 2.5 Write unit tests for Parser and Pretty_Printer
     - Test valid formats: beds only, beds + needs, needs with mixed priorities
     - Test invalid formats: empty body, unknown keywords, malformed numbers
     - Test default priority assignment when priority omitted
@@ -79,7 +79,7 @@ Incremental implementation across 8 phases: infrastructure → Lambda processor 
     - Suppress reply after 5 unauthorized attempts within 10 minutes for 60 minutes
     - _Requirements: 5.3_
 
-  - [ ]* 2.8 Write unit tests for registry lookup and rate-limit guard
+  - [x] 2.8 Write unit tests for registry lookup and rate-limit guard
     - Test authorized and unauthorized phone number scenarios
     - Test rate-limit threshold boundary (5th attempt triggers suppression)
     - Test suppression window expiry
@@ -93,7 +93,7 @@ Incremental implementation across 8 phases: infrastructure → Lambda processor 
     - Read config from env vars: `SHELTER_TABLE`, `PINPOINT_APP_ID`, `ORIGINATION_NUMBER`
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 5.2, 5.4_
 
-  - [ ]* 2.10 Write unit tests for Lambda handler orchestration
+  - [x] 2.10 Write unit tests for Lambda handler orchestration
     - Mock DynamoDB, Pinpoint, registry, and rate-limit modules
     - Test happy path: valid SMS → DynamoDB write → confirmation SMS
     - Test unauthorized sender → error reply (no DynamoDB write)
@@ -134,7 +134,7 @@ Incremental implementation across 8 phases: infrastructure → Lambda processor 
     - Display `"No current needs"` when Needs_List is empty
     - _Requirements: 3.1, 3.6_
 
-  - [ ]* 4.6 Write unit tests for data-access layer
+  - [x]* 4.6 Write unit tests for data-access layer
     - Mock DynamoDB DocumentClient responses
     - Test `getAllShelters` and `getShelterById` return correct typed records
     - _Requirements: 2.1_
@@ -167,7 +167,7 @@ Incremental implementation across 8 phases: infrastructure → Lambda processor 
     - Update shelter cards reactively on incoming events without full reload
     - _Requirements: 2.2, 2.3_
 
-  - [ ]* 5.6 Write unit tests for SSE hook
+  - [x]* 5.6 Write unit tests for SSE hook
     - Mock `EventSource` and assert state transitions on connect, message, and error events
     - Assert stale state is set after connection loss
     - _Requirements: 2.4_
@@ -176,29 +176,29 @@ Incremental implementation across 8 phases: infrastructure → Lambda processor 
   - Ensure all dashboard and Lambda tests pass
   - Ask the user if questions arise before proceeding.
 
-- [ ] 7. Phase 5 — Needs List
-  - [ ] 7.1 Extend `Parser` to handle needs items in SMS body
+- [x] 7. Phase 5 — Needs List
+  - [x] 7.1 Extend `Parser` to handle needs items in SMS body
     - Parse `NEEDS item:priority, item` syntax from SMS
     - Parse `FULFILLED item` syntax to mark needs as fulfilled
     - _Requirements: 3.2, 3.3, 3.5_
 
-  - [ ]* 7.2 Write property-based test for needs parsing round-trip
+  - [x]* 7.2 Write property-based test for needs parsing round-trip
     - **Property 2: Needs round-trip — parse(prettyPrint(record)).needsList deep-equals record.needsList**
     - **Validates: Requirements 1.6, 3.2**
     - Generate arbitrary needs lists with mixed priorities and assert round-trip equivalence
 
-  - [ ] 7.3 Implement priority filter UI component (`src/components/NeedsFilter.tsx`)
+  - [x] 7.3 Implement priority filter UI component (`src/components/NeedsFilter.tsx`)
     - `"use client"` component with filter buttons for Critical / High / Medium / Low / All
     - Filter operates on client state without page reload
     - Each button has visible focus indicator and `aria-pressed` state
     - _Requirements: 3.4, 4.2_
 
-  - [ ] 7.4 Integrate Needs_List and filter into shelter detail page
+  - [x] 7.4 Integrate Needs_List and filter into shelter detail page
     - Pass server-fetched needs to `NeedsFilter` as initial props
     - Display `"No current needs"` when filtered or unfiltered list is empty
     - _Requirements: 3.1, 3.4, 3.6_
 
-  - [ ]* 7.5 Write unit tests for NeedsFilter component
+  - [x]* 7.5 Write unit tests for NeedsFilter component
     - Test filter buttons toggle `aria-pressed` correctly
     - Test filtered output matches selected priority
     - Test empty state renders `"No current needs"` message

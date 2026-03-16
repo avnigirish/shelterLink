@@ -83,6 +83,15 @@ export function parse(smsBody: string): ParseResult {
         need.fulfilled = true;
       }
     }
+
+    // If a fulfilled item wasn't in the current NEEDS list, add it as a fulfilled entry
+    // so the handler can remove it from the stored record
+    for (const fulfilledItem of fulfilledItems) {
+      const alreadyInList = needsList.some(n => n.item.toLowerCase() === fulfilledItem);
+      if (!alreadyInList) {
+        needsList.push({ item: fulfilledItem, priority: 'MEDIUM', fulfilled: true });
+      }
+    }
   }
 
   const record: CapacityRecord = { beds, capacity, status, needsList };

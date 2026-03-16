@@ -101,6 +101,25 @@ describe('Parser', () => {
       const water = result.record.needsList.find(n => n.item === 'water');
       expect(water?.fulfilled).toBeUndefined();
     });
+
+    it('adds fulfilled item not present in NEEDS list so handler can remove it from stored record', () => {
+      const result = parse('BEDS 5/10 FULFILLED blankets');
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const blankets = result.record.needsList.find(n => n.item === 'blankets');
+      expect(blankets).toBeDefined();
+      expect(blankets?.fulfilled).toBe(true);
+      expect(blankets?.priority).toBe('MEDIUM');
+    });
+
+    it('does not duplicate a fulfilled item already in NEEDS list', () => {
+      const result = parse('BEDS 5/10 NEEDS blankets:high FULFILLED blankets');
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const matches = result.record.needsList.filter(n => n.item === 'blankets');
+      expect(matches).toHaveLength(1);
+      expect(matches[0].fulfilled).toBe(true);
+    });
   });
 
   describe('invalid inputs', () => {
@@ -121,6 +140,14 @@ describe('Parser', () => {
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error).toMatch(/exceed/i);
+    });
+
+    it('returns error for negative bed count', () => {
+      // The regex only matches \d+, so "BEDS -5/20" fails to match BEDS entirely
+      const result = parse('BEDS -5/20');
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toMatch(/BEDS/i);
     });
 
     it('returns error for unknown/malformed format', () => {
