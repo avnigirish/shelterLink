@@ -104,32 +104,32 @@ Incremental implementation across 8 phases: infrastructure → Lambda processor 
   - Ensure all Lambda tests pass (`vitest --run` in `packages/lambda`)
   - Ask the user if questions arise before proceeding.
 
-- [ ] 4. Phase 3 — Dashboard Foundation
-  - [ ] 4.1 Scaffold `packages/dashboard` as Next.js App Router project
+- [x] 4. Phase 3 — Dashboard Foundation
+  - [x] 4.1 Scaffold `packages/dashboard` as Next.js App Router project
     - Initialize with TypeScript strict mode and `src/app` directory structure
     - Install and configure Tailwind CSS
     - Define WCAG 2.1 AA color tokens in `tailwind.config.ts` (4.5:1 text contrast, 3:1 UI contrast)
     - _Requirements: 4.1, 2.5_
 
-  - [ ] 4.2 Define shared TypeScript types (`src/types/shelter.ts`)
+  - [x] 4.2 Define shared TypeScript types (`src/types/shelter.ts`)
     - `ShelterRecord`, `CapacityRecord`, `NeedsItem`, `Priority` enum
     - Shared between dashboard and lambda via a `packages/shared` module or inline
     - _Requirements: 2.1, 3.1_
 
-  - [ ] 4.3 Implement DynamoDB data-access layer for dashboard (`src/lib/db.ts`)
+  - [x] 4.3 Implement DynamoDB data-access layer for dashboard (`src/lib/db.ts`)
     - `getAllShelters()` — scan/query all `RECORD#CURRENT` items
     - `getShelterById(id)` — get single shelter record
     - Use `@aws-sdk/lib-dynamodb` DocumentClient with typed inputs
     - _Requirements: 2.1_
 
-  - [ ] 4.4 Implement SSR home page (`src/app/page.tsx`)
+  - [x] 4.4 Implement SSR home page (`src/app/page.tsx`)
     - Server component: fetch all shelters via `getAllShelters()` at request time
     - Render shelter cards with bed availability, occupancy %, status label, and last-updated timestamp
     - Display shelter location and contact info without horizontal scroll at 320px+
     - Include `"No shelters available"` empty state
     - _Requirements: 2.1, 2.5, 2.6_
 
-  - [ ] 4.5 Implement SSR shelter detail page (`src/app/shelter/[id]/page.tsx`)
+  - [x] 4.5 Implement SSR shelter detail page (`src/app/shelter/[id]/page.tsx`)
     - Server component: fetch single shelter and render Needs_List ordered by priority descending
     - Display `"No current needs"` when Needs_List is empty
     - _Requirements: 3.1, 3.6_

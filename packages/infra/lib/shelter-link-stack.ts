@@ -6,8 +6,8 @@ import * as snsSubscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as iam from 'aws-cdk-lib/aws-iam';
-import * as ssm from 'aws-cdk-lib/aws-ssm';
-import * as pinpoint from 'aws-cdk-lib/aws-pinpoint';
+// import * as ssm from 'aws-cdk-lib/aws-ssm';       // re-enable with Pinpoint
+// import * as pinpoint from 'aws-cdk-lib/aws-pinpoint'; // re-enable with Pinpoint
 import { Construct } from 'constructs';
 
 export class ShelterLinkStack extends cdk.Stack {
@@ -112,64 +112,43 @@ export class ShelterLinkStack extends cdk.Stack {
 
     // -------------------------------------------------------------------------
     // Task 1.3 — AWS Pinpoint application and SMS channel
+    // TODO: Re-enable once Pinpoint SMS sandbox access is approved for this account.
+    // To re-enable:
+    //   1. Go to AWS Console → Amazon Pinpoint → request SMS sandbox access
+    //   2. Uncomment the block below and redeploy
     // -------------------------------------------------------------------------
-    const pinpointApp = new pinpoint.CfnApp(this, 'ShelterLinkPinpointApp', {
-      name: 'shelterlink',
-    });
-
-    new pinpoint.CfnSMSChannel(this, 'ShelterLinkSMSChannel', {
-      applicationId: pinpointApp.ref,
-      enabled: true,
-    });
-
-    // Pinpoint — scoped to specific app ARN (added after app is created)
-    lambdaRole.addToPolicy(
-      new iam.PolicyStatement({
-        sid: 'PinpointSendMessages',
-        effect: iam.Effect.ALLOW,
-        actions: ['mobiletargeting:SendMessages'],
-        resources: [
-          `arn:aws:mobiletargeting:${this.region}:${this.account}:apps/${pinpointApp.ref}`,
-          `arn:aws:mobiletargeting:${this.region}:${this.account}:apps/${pinpointApp.ref}/*`,
-        ],
-      })
-    );
-
-    // SSM parameters for Pinpoint config
-    const pinpointAppIdParam = new ssm.StringParameter(
-      this,
-      'PinpointAppIdParam',
-      {
-        parameterName: '/shelterlink/pinpoint/app-id',
-        stringValue: pinpointApp.ref,
-        description: 'ShelterLink Pinpoint application ID',
-      }
-    );
-
-    // Origination number placeholder — set via console or separate deployment step
-    const originationNumberParam = new ssm.StringParameter(
-      this,
-      'OriginationNumberParam',
-      {
-        parameterName: '/shelterlink/pinpoint/origination-number',
-        stringValue: 'PLACEHOLDER',
-        description:
-          'ShelterLink Pinpoint origination phone number (E.164 format)',
-      }
-    );
-
-    // Allow Lambda role to read SSM parameters
-    lambdaRole.addToPolicy(
-      new iam.PolicyStatement({
-        sid: 'SSMParameterRead',
-        effect: iam.Effect.ALLOW,
-        actions: ['ssm:GetParameter'],
-        resources: [
-          pinpointAppIdParam.parameterArn,
-          originationNumberParam.parameterArn,
-        ],
-      })
-    );
+    // const pinpointApp = new pinpoint.CfnApp(this, 'ShelterLinkPinpointApp', {
+    //   name: 'shelterlink',
+    // });
+    // new pinpoint.CfnSMSChannel(this, 'ShelterLinkSMSChannel', {
+    //   applicationId: pinpointApp.ref,
+    //   enabled: true,
+    // });
+    // lambdaRole.addToPolicy(new iam.PolicyStatement({
+    //   sid: 'PinpointSendMessages',
+    //   effect: iam.Effect.ALLOW,
+    //   actions: ['mobiletargeting:SendMessages'],
+    //   resources: [
+    //     `arn:aws:mobiletargeting:${this.region}:${this.account}:apps/${pinpointApp.ref}`,
+    //     `arn:aws:mobiletargeting:${this.region}:${this.account}:apps/${pinpointApp.ref}/*`,
+    //   ],
+    // }));
+    // const pinpointAppIdParam = new ssm.StringParameter(this, 'PinpointAppIdParam', {
+    //   parameterName: '/shelterlink/pinpoint/app-id',
+    //   stringValue: pinpointApp.ref,
+    //   description: 'ShelterLink Pinpoint application ID',
+    // });
+    // const originationNumberParam = new ssm.StringParameter(this, 'OriginationNumberParam', {
+    //   parameterName: '/shelterlink/pinpoint/origination-number',
+    //   stringValue: 'PLACEHOLDER',
+    //   description: 'ShelterLink Pinpoint origination phone number (E.164 format)',
+    // });
+    // lambdaRole.addToPolicy(new iam.PolicyStatement({
+    //   sid: 'SSMParameterRead',
+    //   effect: iam.Effect.ALLOW,
+    //   actions: ['ssm:GetParameter'],
+    //   resources: [pinpointAppIdParam.parameterArn, originationNumberParam.parameterArn],
+    // }));
 
     // -------------------------------------------------------------------------
     // Task 1.2 (continued) — Placeholder Lambda + SQS event source
@@ -187,8 +166,8 @@ export class ShelterLinkStack extends cdk.Stack {
       memorySize: 256,
       environment: {
         SHELTER_TABLE: table.tableName,
-        PINPOINT_APP_ID: pinpointApp.ref,
-        ORIGINATION_NUMBER: 'PLACEHOLDER',
+        PINPOINT_APP_ID: 'PENDING', // re-enable after Pinpoint subscription approved
+        ORIGINATION_NUMBER: 'PENDING',
         LOG_LEVEL: 'INFO',
       },
     });
@@ -218,11 +197,6 @@ export class ShelterLinkStack extends cdk.Stack {
       exportName: 'ShelterLinkDLQUrl',
     });
 
-    new cdk.CfnOutput(this, 'PinpointAppId', {
-      value: pinpointApp.ref,
-      exportName: 'ShelterLinkPinpointAppId',
-    });
-
     new cdk.CfnOutput(this, 'UpdateProcessorFunctionArn', {
       value: updateProcessor.functionArn,
       exportName: 'ShelterLinkUpdateProcessorArn',
@@ -232,5 +206,7 @@ export class ShelterLinkStack extends cdk.Stack {
       value: lambdaRole.roleArn,
       exportName: 'ShelterLinkLambdaRoleArn',
     });
+    // Note: PinpointAppId output is commented out until Pinpoint subscription is approved
+    // new cdk.CfnOutput(this, 'PinpointAppId', { value: pinpointApp.ref, exportName: 'ShelterLinkPinpointAppId' });
   }
 }
