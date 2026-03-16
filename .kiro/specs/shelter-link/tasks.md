@@ -37,14 +37,14 @@ Incremental implementation across 8 phases: infrastructure → Lambda processor 
     - Assert SQS DLQ is wired to main queue
     - _Requirements: 5.1_
 
-- [ ] 2. Phase 2 — Update_Processor Lambda
-  - [ ] 2.1 Scaffold `packages/lambda` with esbuild config and Vitest setup
+- [x] 2. Phase 2 — Update_Processor Lambda
+  - [x] 2.1 Scaffold `packages/lambda` with esbuild config and Vitest setup
     - Configure `tsconfig.json` with `strict: true`, `target: ES2022`
     - Configure esbuild bundle script for Lambda handler output
     - Configure Vitest with coverage thresholds
     - _Requirements: 1.1_
 
-  - [ ] 2.2 Implement `Parser` module (`src/parser.ts`)
+  - [x] 2.2 Implement `Parser` module (`src/parser.ts`)
     - Parse SMS body into `CapacityRecord` type: `{ beds, capacity, status, needsList }`
     - Accept case-insensitive, whitespace-tolerant input (regex-based)
     - Return `ParseResult` discriminated union: `{ ok: true, record }` | `{ ok: false, error }`
@@ -57,7 +57,7 @@ Incremental implementation across 8 phases: infrastructure → Lambda processor 
     - Use `@fast-check/vitest` or `fast-check` with Vitest
     - Generate arbitrary valid SMS strings and assert structural equivalence after round-trip
 
-  - [ ] 2.4 Implement `Pretty_Printer` module (`src/prettyPrinter.ts`)
+  - [x] 2.4 Implement `Pretty_Printer` module (`src/prettyPrinter.ts`)
     - Format `CapacityRecord` into human-readable confirmation SMS string
     - Format error reply with example correct format
     - _Requirements: 1.3, 1.4_
@@ -68,13 +68,13 @@ Incremental implementation across 8 phases: infrastructure → Lambda processor 
     - Test default priority assignment when priority omitted
     - _Requirements: 1.4, 1.5, 3.3_
 
-  - [ ] 2.6 Implement shelter registry lookup (`src/registry.ts`)
+  - [x] 2.6 Implement shelter registry lookup (`src/registry.ts`)
     - Query DynamoDB for `PK=REGISTRY#<hashedPhone>` to validate sender
     - Return `{ authorized: boolean, shelterId?: string }`
     - Mask phone number in all log statements using `+1***XXXX` format
     - _Requirements: 5.1, 5.2, 5.4_
 
-  - [ ] 2.7 Implement rate-limit guard (`src/rateLimit.ts`)
+  - [x] 2.7 Implement rate-limit guard (`src/rateLimit.ts`)
     - Track unauthorized attempt count in DynamoDB (`PK=RATELIMIT#<hashedPhone>`, TTL 10 min)
     - Suppress reply after 5 unauthorized attempts within 10 minutes for 60 minutes
     - _Requirements: 5.3_
@@ -85,7 +85,7 @@ Incremental implementation across 8 phases: infrastructure → Lambda processor 
     - Test suppression window expiry
     - _Requirements: 5.2, 5.3_
 
-  - [ ] 2.9 Implement `Update_Processor` Lambda handler (`src/handler.ts`)
+  - [x] 2.9 Implement `Update_Processor` Lambda handler (`src/handler.ts`)
     - Parse SNS/SQS event envelope to extract SMS body and sender phone
     - Orchestrate: registry check → rate-limit check → parse → DynamoDB write → Pinpoint reply
     - Write `RECORD#CURRENT` and `LOG#<timestamp>` items to DynamoDB
