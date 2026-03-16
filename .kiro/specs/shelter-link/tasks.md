@@ -6,27 +6,27 @@ Incremental implementation across 8 phases: infrastructure → Lambda processor 
 
 ## Tasks
 
-- [ ] 1. Phase 1 — Infrastructure (CDK Stack)
-  - [ ] 1.1 Create CDK stack in `packages/infra` with DynamoDB single-table
+- [x] 1. Phase 1 — Infrastructure (CDK Stack)
+  - [x] 1.1 Create CDK stack in `packages/infra` with DynamoDB single-table
     - Define `ShelterLinkTable` with `PK` (string) and `SK` (string) composite key
     - Enable DynamoDB Streams (`NEW_AND_OLD_IMAGES`)
     - Set TTL attribute `ttl` on the table
     - Export table name and stream ARN as CDK outputs
     - _Requirements: 5.1, 1.1_
 
-  - [ ] 1.2 Add SNS topic, SQS queue, and DLQ to CDK stack
+  - [x] 1.2 Add SNS topic, SQS queue, and DLQ to CDK stack
     - Create SNS topic `shelterlink-inbound`
     - Create SQS queue with a DLQ (max receive count: 3)
     - Subscribe SQS queue to SNS topic
     - Wire SQS as Lambda event source for `Update_Processor`
     - _Requirements: 1.1, 5.4_
 
-  - [ ] 1.3 Add AWS Pinpoint application resource to CDK stack
+  - [x] 1.3 Add AWS Pinpoint application resource to CDK stack
     - Create Pinpoint app and SMS channel
     - Store Pinpoint app ID and origination number as SSM parameters
     - _Requirements: 1.1, 1.3_
 
-  - [ ] 1.4 Define Lambda execution IAM role with least-privilege policy
+  - [x] 1.4 Define Lambda execution IAM role with least-privilege policy
     - Scope DynamoDB permissions to specific table ARN
     - Scope Pinpoint permissions to specific app ARN
     - Scope SNS/SQS permissions to specific resource ARNs
