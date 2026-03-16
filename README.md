@@ -31,24 +31,31 @@ shelterlink/
 │   │   ├── src/
 │   │   │   ├── handler.ts
 │   │   │   ├── parser.ts
-│   │   │   └── pretty-printer.ts
+│   │   │   ├── prettyPrinter.ts
+│   │   │   ├── registry.ts
+│   │   │   ├── rateLimit.ts
+│   │   │   └── types.ts
 │   │   └── vitest.config.ts
-│   ├── dashboard/       # Next.js App Router, Tailwind CSS
-│   │   ├── app/
-│   │   │   ├── page.tsx
-│   │   │   ├── shelter/[id]/page.tsx
-│   │   │   └── admin/page.tsx
-│   │   └── tailwind.config.ts
+│   ├── dashboard/       # Next.js 14 App Router, Tailwind CSS
+│   │   ├── src/
+│   │   │   ├── app/
+│   │   │   │   ├── layout.tsx
+│   │   │   │   ├── page.tsx              # SSR home — shelter list
+│   │   │   │   └── shelter/[id]/page.tsx # SSR detail — needs list
+│   │   │   ├── lib/
+│   │   │   │   ├── db.ts                 # DynamoDB data-access layer
+│   │   │   │   └── mockData.ts           # Real shelter data for local dev
+│   │   │   └── types/
+│   │   │       └── shelter.ts            # Shared TypeScript types
+│   │   └── tailwind.config.ts            # WCAG 2.1 AA color tokens
 │   └── infra/           # AWS CDK stack (TypeScript)
 │       └── lib/
 │           └── shelter-link-stack.ts
 ├── .kiro/
 │   └── specs/
 │       └── shelter-link/
-│           ├── product.md
 │           ├── requirements.md
 │           ├── system_design.md
-│           ├── steering.md
 │           └── tasks.md
 └── README.md
 ```
@@ -61,14 +68,38 @@ shelterlink/
 # Install dependencies
 npm install
 
-# Deploy infrastructure (requires AWS credentials)
-cd packages/infra && npx cdk deploy
-
-# Run the dashboard locally
+# Run the dashboard locally with mock data (no AWS needed)
 cd packages/dashboard && npm run dev
 
 # Run all tests
 npm run test --workspaces
+```
+
+### Local dev with mock data
+
+The dashboard defaults to mock data (real Springfield, IL shelters) when `USE_MOCK_DATA=true` is set in `packages/dashboard/.env.local`. No AWS credentials required.
+
+```bash
+# packages/dashboard/.env.local
+AWS_REGION=us-east-1
+USE_MOCK_DATA=true
+```
+
+### Deploy to AWS
+
+> **Note:** AWS Pinpoint requires a separate subscription approval before the full stack can deploy. See [Known Constraints](#known-constraints--design-decisions) below.
+
+```bash
+# First-time bootstrap
+cd packages/infra && npx cdk bootstrap
+
+# Deploy (Pinpoint is commented out until subscription is approved)
+npx cdk deploy
+
+# Once deployed, switch dashboard to real data
+# packages/dashboard/.env.local
+SHELTER_TABLE=shelterlink-data
+AWS_REGION=us-east-1
 ```
 
 ---
@@ -177,26 +208,38 @@ The three artifacts — `requirements.md`, `system_design.md`, `steering.md` —
 
 ## Environment Variables
 
-Create a `.env.local` (dashboard) and `.env` (lambda) from this reference before deploying:
+Create `packages/dashboard/.env.local` before running locally:
 
 ```bash
-# Lambda (.env)
-SHELTER_TABLE=shelterlink-prod          # DynamoDB table name
-PINPOINT_APP_ID=                        # AWS Pinpoint application ID
-ORIGINATION_NUMBER=                     # E.164 format, e.g. +18005550100
+# Local dev (mock data — no AWS needed)
 AWS_REGION=us-east-1
+USE_MOCK_DATA=true
 
-# Dashboard (.env.local)
+# Production (real DynamoDB)
+AWS_REGION=us-east-1
+SHELTER_TABLE=shelterlink-data
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+
+# Admin auth (Phase 6)
 NEXT_PUBLIC_ALLOWED_ORIGIN=https://your-domain.com
-NEXTAUTH_SECRET=                        # openssl rand -base64 32
+NEXTAUTH_SECRET=          # openssl rand -base64 32
 NEXTAUTH_URL=https://your-domain.com
-GITHUB_CLIENT_ID=                       # GitHub OAuth app client ID
-GITHUB_CLIENT_SECRET=                   # GitHub OAuth app client secret
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
 ```
+
+Lambda environment variables are set automatically by the CDK stack via `environment:` on the function definition.
 
 ---
 
 ## Known Constraints & Design Decisions
+
+### Pinpoint SMS (temporarily disabled)
+AWS Pinpoint requires a subscription approval on new accounts (`SubscriptionRequiredException`). The Pinpoint resources in the CDK stack are commented out with a `TODO` marker. To re-enable:
+1. Go to AWS Console → Amazon Pinpoint → request SMS sandbox access
+2. Uncomment the Pinpoint block in `packages/infra/lib/shelter-link-stack.ts`
+3. Redeploy with `npx cdk deploy`
 
 ### Auth Provider
 Admin routes use **GitHub OAuth via NextAuth.js** (not AWS Cognito). Cognito adds CDK complexity that isn't justified for hackathon scope. Swap to Cognito post-launch if multi-org admin access is needed.
