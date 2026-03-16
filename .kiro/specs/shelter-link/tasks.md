@@ -139,30 +139,30 @@ Incremental implementation across 8 phases: infrastructure → Lambda processor 
     - Test `getAllShelters` and `getShelterById` return correct typed records
     - _Requirements: 2.1_
 
-- [ ] 5. Phase 4 — Real-Time Updates (SSE)
-  - [ ] 5.1 Implement DynamoDB Streams processor Lambda (`packages/lambda/src/streamHandler.ts`)
+- [x] 5. Phase 4 — Real-Time Updates (SSE)
+  - [x] 5.1 Implement DynamoDB Streams processor Lambda (`packages/lambda/src/streamHandler.ts`)
     - Triggered by DynamoDB Stream on `RECORD#CURRENT` item changes
     - Publish change payload to a connection registry (DynamoDB connection table)
     - _Requirements: 2.2, 2.3_
 
-  - [ ] 5.2 Implement SSE API route (`src/app/api/updates/route.ts`)
+  - [x] 5.2 Implement SSE API route (`src/app/api/updates/route.ts`)
     - Stream `text/event-stream` response to connected clients
     - Poll connection table or use long-poll pattern to push DynamoDB Stream events
     - Set appropriate headers: `Cache-Control: no-cache`, `Connection: keep-alive`
     - _Requirements: 2.3_
 
-  - [ ] 5.3 Implement client-side SSE hook (`src/hooks/useShelterUpdates.ts`)
+  - [x] 5.3 Implement client-side SSE hook (`src/hooks/useShelterUpdates.ts`)
     - `"use client"` hook that opens `EventSource` to `/api/updates`
     - Merge incoming JSON patches into local shelter state
     - Track connection status: `connected` | `disconnected` | `stale`
     - _Requirements: 2.2, 2.3, 2.4_
 
-  - [ ] 5.4 Add stale-data warning banner to home page
+  - [x] 5.4 Add stale-data warning banner to home page
     - Show banner with last-successful-update timestamp when SSE connection is lost
     - Use `aria-live="polite"` on the banner region
     - _Requirements: 2.4, 4.4_
 
-  - [ ] 5.5 Wire SSE hook into home page client component
+  - [x] 5.5 Wire SSE hook into home page client component
     - Wrap shelter list in a `"use client"` component that hydrates from SSR props and subscribes to SSE
     - Update shelter cards reactively on incoming events without full reload
     - _Requirements: 2.2, 2.3_
@@ -172,7 +172,7 @@ Incremental implementation across 8 phases: infrastructure → Lambda processor 
     - Assert stale state is set after connection loss
     - _Requirements: 2.4_
 
-- [ ] 6. Checkpoint — Real-time updates wired end-to-end
+- [x] 6. Checkpoint — Real-time updates wired end-to-end
   - Ensure all dashboard and Lambda tests pass
   - Ask the user if questions arise before proceeding.
 
