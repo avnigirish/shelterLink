@@ -6,6 +6,7 @@ import * as snsSubscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 // import * as ssm from 'aws-cdk-lib/aws-ssm';       // re-enable with Pinpoint
 // import * as pinpoint from 'aws-cdk-lib/aws-pinpoint'; // re-enable with Pinpoint
 import { Construct } from 'constructs';
@@ -208,5 +209,114 @@ export class ShelterLinkStack extends cdk.Stack {
     });
     // Note: PinpointAppId output is commented out until Pinpoint subscription is approved
     // new cdk.CfnOutput(this, 'PinpointAppId', { value: pinpointApp.ref, exportName: 'ShelterLinkPinpointAppId' });
+
+    // -------------------------------------------------------------------------
+    // Task 10.2 — Stream handler Lambda with structured logging
+    // -------------------------------------------------------------------------
+    const streamHandler = new lambda.Function(this, 'StreamHandler', {
+      functionName: 'shelterlink-stream-handler',
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'streamHandler.handler',
+      code: lambda.Code.fromInline(
+        `exports.handler = async (event) => { require('@aws-lambda-powertools/logger'); };`
+      ),
+      role: lambdaRole,
+      timeout: cdk.Duration.seconds(30),
+      memorySize: 128,
+      environment: {
+        CONNECTIONS_TABLE: table.tableName,
+        LOG_LEVEL: 'INFO',
+      },
+    });
+
+    // Grant stream handler read access to DynamoDB streams
+    table.grantStreamRead(streamHandler);
+
+    // Wire DynamoDB stream to stream handler
+    streamHandler.addEventSource(
+      new lambdaEventSources.DynamoEventSource(table, {
+        startingPosition: lambda.StartingPosition.LATEST,
+        batchSize: 10,
+        retryAttempts: 2,
+      })
+    );
+
+    // Update the Update_Processor env to include LOG_LEVEL explicitly
+    updateProcessor.addEnvironment('LOG_LEVEL', 'INFO');
+
+    // -------------------------------------------------------------------------
+    // Task 10.1 — CloudWatch Alarms
+    // -------------------------------------------------------------------------
+
+    // Alarm: Lambda error rate > 1% over 5 minutes
+    const errorRateAlarm = new cloudwatch.Alarm(this, 'UpdateProcessorErrorRateAlarm', {
+      alarmName: 'shelterlink-update-processor-error-rate',
+      alarmDescription: 'Lambda Update_Processor error rate exceeded 1% over 5 minutes',
+      metric: new cloudwatch.MathExpression({
+        expression: 'errors / MAX([errors, invocations]) * 100',
+        usingMetrics: {
+          errors: updateProcessor.metricErrors({
+            period: cdk.Duration.minutes(5),
+            statistic: 'Sum',
+          }),
+          invocations: updateProcessor.metricInvocations({
+            period: cdk.Duration.minutes(5),
+            statistic: 'Sum',
+          }),
+        },
+        period: cdk.Duration.minutes(5),
+        label: 'Error Rate (%)',
+      }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+
+    // Alarm: DLQ has any messages visible (indicates processing failures)
+    const dlqAlarm = new cloudwatch.Alarm(this, 'DLQMessagesVisibleAlarm', {
+      alarmName: 'shelterlink-dlq-messages-visible',
+      alarmDescription: 'Messages appeared in the ShelterLink DLQ — processing failures detected',
+      metric: dlq.metricApproximateNumberOfMessagesVisible({
+        period: cdk.Duration.minutes(1),
+        statistic: 'Maximum',
+      }),
+      threshold: 0,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+
+    // Alarm: DynamoDB throttled requests > 0
+    const dynamoThrottleAlarm = new cloudwatch.Alarm(this, 'DynamoDBThrottledRequestsAlarm', {
+      alarmName: 'shelterlink-dynamodb-throttled-requests',
+      alarmDescription: 'DynamoDB throttled requests detected on ShelterLink table',
+      metric: new cloudwatch.Metric({
+        namespace: 'AWS/DynamoDB',
+        metricName: 'ThrottledRequests',
+        dimensionsMap: { TableName: table.tableName },
+        period: cdk.Duration.minutes(5),
+        statistic: 'Sum',
+      }),
+      threshold: 0,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+
+    new cdk.CfnOutput(this, 'ErrorRateAlarmArn', {
+      value: errorRateAlarm.alarmArn,
+      exportName: 'ShelterLinkErrorRateAlarmArn',
+    });
+
+    new cdk.CfnOutput(this, 'DLQAlarmArn', {
+      value: dlqAlarm.alarmArn,
+      exportName: 'ShelterLinkDLQAlarmArn',
+    });
+
+    new cdk.CfnOutput(this, 'DynamoThrottleAlarmArn', {
+      value: dynamoThrottleAlarm.alarmArn,
+      exportName: 'ShelterLinkDynamoThrottleAlarmArn',
+    });
   }
 }

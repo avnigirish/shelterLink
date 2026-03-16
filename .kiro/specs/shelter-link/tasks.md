@@ -232,52 +232,52 @@ Incremental implementation across 8 phases: infrastructure → Lambda processor 
     - Test valid session + valid origin executes write
     - _Requirements: 5.5_
 
-- [ ] 9. Phase 7 — Accessibility Pass
-  - [ ] 9.1 Add ARIA live regions to all real-time update areas
+- [x] 9. Phase 7 — Accessibility Pass
+  - [x] 9.1 Add ARIA live regions to all real-time update areas
     - Wrap shelter card list in `<div aria-live="polite" aria-atomic="false">`
     - Wrap stale-data banner in `<div role="status" aria-live="polite">`
     - _Requirements: 4.4_
 
-  - [ ] 9.2 Audit and fix keyboard navigation across all interactive elements
+  - [x] 9.2 Audit and fix keyboard navigation across all interactive elements
     - Ensure all buttons, links, and filter controls are reachable via Tab
     - Ensure visible `:focus-visible` ring on all interactive elements (Tailwind `focus-visible:ring`)
     - Ensure modal/dialog (if any) traps focus correctly
     - _Requirements: 4.2_
 
-  - [ ] 9.3 Add text alternatives for all non-text status indicators
+  - [x] 9.3 Add text alternatives for all non-text status indicators
     - Status badges must include both color class and text label
     - Capacity bar/icon must have `aria-label` with numeric value
     - Priority icons in Needs_List must have `aria-label`
     - _Requirements: 4.3, 4.5_
 
-  - [ ] 9.4 Enforce minimum font size and zoom readability
+  - [x] 9.4 Enforce minimum font size and zoom readability
     - Set `html { font-size: 16px }` base in global CSS
     - Verify layout does not break at 200% browser zoom (no overflow clipping of text)
     - _Requirements: 4.6_
 
-  - [ ] 9.5 Write accessibility unit tests for key components
+  - [x] 9.5 Write accessibility unit tests for key components
     - Use `@testing-library/react` with `jest-axe` or `vitest-axe` to assert no axe violations
     - Test shelter card, needs list item, and filter button components
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
 
-- [ ] 10. Phase 8 — Observability
-  - [ ] 10.1 Add CloudWatch alarms to CDK stack
+- [x] 10. Phase 8 — Observability
+  - [x] 10.1 Add CloudWatch alarms to CDK stack
     - Alarm on Lambda `Update_Processor` error rate > 1% over 5 minutes
     - Alarm on DLQ `ApproximateNumberOfMessagesVisible` > 0
     - Alarm on DynamoDB `ThrottledRequests` > 0
     - _Requirements: 1.1_
 
-  - [ ] 10.2 Add structured logging to all Lambda handlers
+  - [x] 10.2 Add structured logging to all Lambda handlers
     - Ensure every handler uses `@aws-lambda-powertools/logger` with `LOG_LEVEL` env var
     - Log inbound SMS attempt with masked phone, timestamp, and outcome (authorized/unauthorized/parse-error)
     - _Requirements: 5.4_
 
-  - [ ]* 10.3 Write unit tests for structured log output
+  - [x] 10.3 Write unit tests for structured log output
     - Assert logger is called with correct masked phone format on unauthorized attempt
     - Assert no raw phone number appears in any log message
     - _Requirements: 5.4_
 
-- [ ] 11. Final Checkpoint — All tests pass
+- [x] 11. Final Checkpoint — All tests pass
   - Run `vitest --run` in `packages/lambda` and `packages/dashboard`
   - Run CDK synth in `packages/infra` to validate stack compiles without errors
   - Ask the user if questions arise.

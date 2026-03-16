@@ -14,7 +14,7 @@ export default async function ShelterDetailPage({ params }: { params: { id: stri
 
   return (
     <div className="max-w-2xl">
-      <Link href="/" className="text-sm text-text-subtle hover:underline focus-visible:ring-2 focus-visible:ring-offset-2 rounded">
+      <Link href="/" className="text-sm text-text-subtle hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-text rounded">
         ← Back to all shelters
       </Link>
       <h2 className="text-2xl font-bold text-text mt-4 mb-1">{shelter.name}</h2>

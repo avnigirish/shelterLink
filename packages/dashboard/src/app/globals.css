@@ -3,5 +3,14 @@
 @tailwind utilities;
 
 html {
-  font-size: 16px;
+  font-size: 16px; /* WCAG 1.4.4 — base size, scales with browser zoom */
+}
+
+body {
+  overflow-x: hidden; /* prevent horizontal scroll at high zoom levels */
+}
+
+/* Ensure text never clips inside containers at 200% zoom */
+* {
+  min-width: 0;
 }
