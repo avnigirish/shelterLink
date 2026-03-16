@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "name": "React Quality & Accessibility Audit",
+  "description": "On every React component file save, runs a code quality analysis and accessibility audit, then summarizes findings in chat for process transparency",
+  "version": "1.0.0",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/*.tsx",
+      "**/*.jsx"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A React component file was just saved. Perform a two-part audit and report findings in chat.\n\n## Part 1: Code Quality Analysis\nRead the saved file and check for:\n- TypeScript strictness: any use of `any` type, missing explicit return types, untyped props\n- React best practices: missing `key` props on lists, inline function definitions in JSX that should be extracted, unnecessary `useEffect` dependencies\n- ShelterLink steering compliance: confirm `\"use client\"` is only present when browser APIs are genuinely required; server components should be the default\n- Error handling: async operations must have explicit error boundaries or try/catch\n- No `console.log` statements (use structured logging)\n\n## Part 2: Accessibility Audit\nRead the saved file and check for:\n- All `<img>` elements have descriptive `alt` attributes (not empty unless decorative)\n- All interactive elements (`<button>`, `<a>`, custom components) have accessible labels via `aria-label`, `aria-labelledby`, or visible text\n- Color-only status indicators: confirm each status uses both a color AND a text label or icon with `aria-label` (per ShelterLink steering rules)\n- Real-time update regions use `aria-live=\"polite\"` (required for shelter capacity updates)\n- Form inputs have associated `<label>` elements or `aria-label`\n- Focus management: modals or dynamic content changes must move focus appropriately\n- Minimum font size: no hardcoded font sizes below 16px\n- Keyboard navigation: onClick handlers on non-interactive elements must also have onKeyDown/onKeyUp equivalents\n\n## Output Format\nRespond in chat with a concise summary using this structure:\n\n**File:** `<filename>`\n\n**Code Quality**\n- List each issue found with the line number and a one-line fix suggestion\n- If no issues: \"No code quality issues found.\"\n\n**Accessibility**\n- List each issue found with the line number and the specific WCAG 2.1 AA criterion it violates\n- If no issues: \"No accessibility issues found.\"\n\n**Process Transparency Note**\n- One sentence summarizing the overall health of this component for inclusion in the technical write-up\n\nKeep the summary actionable and brief. Do not rewrite the file — only report findings."
+  }
+}

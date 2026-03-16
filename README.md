@@ -175,6 +175,46 @@ The three artifacts — `requirements.md`, `system_design.md`, `steering.md` —
 
 ---
 
+## Environment Variables
+
+Create a `.env.local` (dashboard) and `.env` (lambda) from this reference before deploying:
+
+```bash
+# Lambda (.env)
+SHELTER_TABLE=shelterlink-prod          # DynamoDB table name
+PINPOINT_APP_ID=                        # AWS Pinpoint application ID
+ORIGINATION_NUMBER=                     # E.164 format, e.g. +18005550100
+AWS_REGION=us-east-1
+
+# Dashboard (.env.local)
+NEXT_PUBLIC_ALLOWED_ORIGIN=https://your-domain.com
+NEXTAUTH_SECRET=                        # openssl rand -base64 32
+NEXTAUTH_URL=https://your-domain.com
+GITHUB_CLIENT_ID=                       # GitHub OAuth app client ID
+GITHUB_CLIENT_SECRET=                   # GitHub OAuth app client secret
+```
+
+---
+
+## Known Constraints & Design Decisions
+
+### Auth Provider
+Admin routes use **GitHub OAuth via NextAuth.js** (not AWS Cognito). Cognito adds CDK complexity that isn't justified for hackathon scope. Swap to Cognito post-launch if multi-org admin access is needed.
+
+### SSE Reconnection
+SSE connections are stateless per Lambda invocation. The client dashboard implements exponential backoff reconnection (max 30s interval). Connection state is tracked in a DynamoDB `CONNECTIONS` table (`PK=CONN#<connectionId>`, TTL=300s).
+
+### SMS Throughput & Rate Limiting
+Lambda reserved concurrency is set to 10 for the Update_Processor to prevent DynamoDB write throttling during traffic spikes. An SQS queue with a Dead Letter Queue (DLQ) sits between SNS and Lambda — failed SMS processing is captured rather than silently dropped.
+
+### Pinpoint Number Type
+Uses a **long code** number for development and demo. Toll-free numbers require carrier registration (2–3 week lead time). Switch to toll-free for production to improve deliverability.
+
+### Audit Hook Scope
+The React Quality & Accessibility audit hook fires on `.tsx` and `.jsx` files only. Lambda TypeScript handlers (`.ts`) are covered by the Vitest test suite and CDK synth checks instead.
+
+---
+
 ## AWS Services Used
 
 | Service | Role |
