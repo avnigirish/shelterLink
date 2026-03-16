@@ -100,7 +100,7 @@ Incremental implementation across 8 phases: infrastructure → Lambda processor 
     - Test parse failure → error reply with format example
     - _Requirements: 1.1, 1.2, 1.3, 1.4_
 
-- [ ] 3. Checkpoint — Lambda phase complete
+- [x] 3. Checkpoint — Lambda phase complete
   - Ensure all Lambda tests pass (`vitest --run` in `packages/lambda`)
   - Ask the user if questions arise before proceeding.
 
