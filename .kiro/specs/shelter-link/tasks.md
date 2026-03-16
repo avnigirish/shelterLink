@@ -134,7 +134,7 @@ Incremental implementation across 8 phases: infrastructure → Lambda processor 
     - Display `"No current needs"` when Needs_List is empty
     - _Requirements: 3.1, 3.6_
 
-  - [x]* 4.6 Write unit tests for data-access layer
+  - [x] 4.6 Write unit tests for data-access layer
     - Mock DynamoDB DocumentClient responses
     - Test `getAllShelters` and `getShelterById` return correct typed records
     - _Requirements: 2.1_
@@ -167,7 +167,7 @@ Incremental implementation across 8 phases: infrastructure → Lambda processor 
     - Update shelter cards reactively on incoming events without full reload
     - _Requirements: 2.2, 2.3_
 
-  - [x]* 5.6 Write unit tests for SSE hook
+  - [x] 5.6 Write unit tests for SSE hook
     - Mock `EventSource` and assert state transitions on connect, message, and error events
     - Assert stale state is set after connection loss
     - _Requirements: 2.4_
@@ -182,7 +182,7 @@ Incremental implementation across 8 phases: infrastructure → Lambda processor 
     - Parse `FULFILLED item` syntax to mark needs as fulfilled
     - _Requirements: 3.2, 3.3, 3.5_
 
-  - [x]* 7.2 Write property-based test for needs parsing round-trip
+  - [x] 7.2 Write property-based test for needs parsing round-trip
     - **Property 2: Needs round-trip — parse(prettyPrint(record)).needsList deep-equals record.needsList**
     - **Validates: Requirements 1.6, 3.2**
     - Generate arbitrary needs lists with mixed priorities and assert round-trip equivalence
@@ -198,35 +198,35 @@ Incremental implementation across 8 phases: infrastructure → Lambda processor 
     - Display `"No current needs"` when filtered or unfiltered list is empty
     - _Requirements: 3.1, 3.4, 3.6_
 
-  - [x]* 7.5 Write unit tests for NeedsFilter component
+  - [x] 7.5 Write unit tests for NeedsFilter component
     - Test filter buttons toggle `aria-pressed` correctly
     - Test filtered output matches selected priority
     - Test empty state renders `"No current needs"` message
     - _Requirements: 3.4, 3.6_
 
-- [ ] 8. Phase 6 — Admin and Auth
-  - [ ] 8.1 Configure NextAuth.js with GitHub OAuth provider (`src/app/api/auth/[...nextauth]/route.ts`)
+- [x] 8. Phase 6 — Admin and Auth
+  - [x] 8.1 Configure NextAuth.js with GitHub OAuth provider (`src/app/api/auth/[...nextauth]/route.ts`)
     - Set `NEXTAUTH_SECRET`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` env vars
     - Restrict sign-in to allowed GitHub org or email list via `signIn` callback
     - _Requirements: 5.5_
 
-  - [ ] 8.2 Implement `/admin` layout with session guard (`src/app/admin/layout.tsx`)
+  - [x] 8.2 Implement `/admin` layout with session guard (`src/app/admin/layout.tsx`)
     - Server component: redirect to sign-in if no valid session
     - _Requirements: 5.5_
 
-  - [ ] 8.3 Implement shelter registry management page (`src/app/admin/page.tsx`)
+  - [x] 8.3 Implement shelter registry management page (`src/app/admin/page.tsx`)
     - List registered shelters with masked phone numbers
     - Forms to add and remove shelter registrations
     - _Requirements: 5.1, 5.5_
 
-  - [ ] 8.4 Implement admin API routes for registry mutations
+  - [x] 8.4 Implement admin API routes for registry mutations
     - `POST /api/admin/shelters` — add shelter registration
     - `DELETE /api/admin/shelters/[id]` — remove shelter registration
     - Validate NextAuth session token before any write
     - Validate `Origin` header against `NEXT_PUBLIC_ALLOWED_ORIGIN`
     - _Requirements: 5.1, 5.5_
 
-  - [ ]* 8.5 Write unit tests for admin API routes
+  - [x] 8.5 Write unit tests for admin API routes
     - Test unauthenticated request returns 401
     - Test invalid `Origin` header returns 403
     - Test valid session + valid origin executes write
@@ -255,7 +255,7 @@ Incremental implementation across 8 phases: infrastructure → Lambda processor 
     - Verify layout does not break at 200% browser zoom (no overflow clipping of text)
     - _Requirements: 4.6_
 
-  - [ ]* 9.5 Write accessibility unit tests for key components
+  - [ ] 9.5 Write accessibility unit tests for key components
     - Use `@testing-library/react` with `jest-axe` or `vitest-axe` to assert no axe violations
     - Test shelter card, needs list item, and filter button components
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
