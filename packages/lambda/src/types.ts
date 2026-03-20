@@ -51,3 +51,33 @@ export interface DonationRecord {
   deliveredAt?: string;
   notes?: string;
 }
+
+// ── SMS Broadcast Alerts ──────────────────────────────────────────────────────
+
+export type SubscriptionStatus = 'ACTIVE' | 'UNSUBSCRIBED';
+
+export type AlertTriggerType =
+  | 'STATUS_FULL'
+  | 'STATUS_CLOSED'
+  | 'STATUS_OPEN'
+  | 'CRITICAL_NEED';
+
+export interface SubscriptionRecord {
+  PK: string;           // SUBSCRIBER#<sha256(phone)>
+  SK: string;           // SHELTER#<shelterId>
+  phone: string;        // raw E.164 — used by Pinpoint for delivery
+  shelterId: string;    // GSI partition key
+  status: SubscriptionStatus; // GSI sort key
+  subscribedAt: string; // ISO 8601
+  updatedAt: string;    // ISO 8601
+  // No ttl — subscriptions persist until explicitly unsubscribed
+}
+
+export interface AlertTrigger {
+  type: AlertTriggerType;
+  shelterId: string;
+  shelterName: string;
+  beds?: number;
+  capacity?: number;
+  newCriticalItems?: string[];
+}

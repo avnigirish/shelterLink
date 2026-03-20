@@ -8,6 +8,7 @@ import { NeedsFilter } from '@/components/NeedsFilter';
 import { InventoryPanel } from '@/components/InventoryPanel';
 import { CommunityChat } from '@/components/CommunityChat';
 import { getMessages } from '@/lib/mockChatStore';
+import { AlertSubscribeForm } from '@/components/AlertSubscribeForm';
 import dynamic from 'next/dynamic';
 
 const AdvocateChat = dynamic(
@@ -75,6 +76,10 @@ export default async function ShelterDetailPage({ params }: { params: { id: stri
         </div>
 
         <div className="mt-6">
+          <AlertSubscribeForm shelterId={params.id} shelterName={shelter.name} />
+        </div>
+
+        <div className="mt-4">
           <Link
             href={`/donate/${params.id}`}
             className="inline-block px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium

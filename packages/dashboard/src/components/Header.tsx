@@ -39,6 +39,17 @@ export function Header() {
 
           {/* Actions */}
           <div className="flex items-center gap-2">
+            {/* Supply Drive shortcut */}
+            <Link
+              href="/supply-drive"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium
+                text-text-subtle dark:text-dark-subtle
+                hover:bg-surface-subtle dark:hover:bg-dark-elevated
+                focus:outline-none focus:ring-2 focus:ring-brand-500"
+            >
+              <span aria-hidden="true">📦</span>
+              <span>Supply Drive</span>
+            </Link>
             {/* Dark mode toggle */}
             <button
               onClick={toggle}

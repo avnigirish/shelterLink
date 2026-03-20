@@ -154,6 +154,7 @@ When the Advocate agent processes a donation pledge, it automatically posts a no
 | AI Community Advocate | Bedrock-powered agentic assistant — matches donors to shelters, executes pledges and chat alerts via tools |
 | Community Activity Feed | Pledge notifications auto-posted to shelter chat by the Advocate agent |
 | Admin Panel | GitHub OAuth-gated registry management, inventory editing, and donation oversight |
+| SMS Broadcast Alerts | Outbound SMS notifications via Pinpoint when shelters go FULL/CLOSED or gain CRITICAL needs — volunteers and donors subscribe per-shelter; STOP/START keyword opt-out/in supported *(implementation in progress — see `.kiro/specs/sms-broadcast-alerts/tasks.md`)* |
 
 ---
 

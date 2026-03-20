@@ -8,6 +8,7 @@ import { parse } from './parser';
 import { formatConfirmation, formatError } from './prettyPrinter';
 import { lookupRegistry, maskPhone } from './registry';
 import { checkRateLimit, recordUnauthorizedAttempt } from './rateLimit';
+import { unsubscribePhone, resubscribePhone } from './subscription';
 
 const logger = new Logger({ serviceName: 'shelter-link-update-processor' });
 
@@ -66,6 +67,18 @@ async function processUpdate(senderPhone: string, smsBody: string): Promise<stri
   const masked = maskPhone(senderPhone);
 
   logger.info('Inbound SMS received', { maskedPhone: masked });
+
+  // Step 0: STOP/START keyword handling (before registry/rate-limit checks)
+  const trimmedBody = smsBody.trim().toUpperCase();
+  if (trimmedBody === 'STOP') {
+    await unsubscribePhone(senderPhone, dynamoClient, SHELTER_TABLE);
+    await sendSms(senderPhone, 'You have been unsubscribed from ShelterLink alerts. Reply START to resubscribe.');
+    return null;
+  }
+  if (trimmedBody === 'START') {
+    await resubscribePhone(senderPhone, dynamoClient, SHELTER_TABLE);
+    return null;
+  }
 
   // Step 1: Rate-limit check
   const { suppressed } = await checkRateLimit(senderPhone, dynamoClient, SHELTER_TABLE);

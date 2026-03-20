@@ -41,22 +41,22 @@ export function InfoPanel({ open, onClose }: Props) {
 
   if (!open) return null;
 
+  const panelCls = [
+    'panel-open fixed right-0 top-0 h-full w-full max-w-sm z-50 overflow-y-auto flex flex-col outline-none',
+    'bg-surface-DEFAULT dark:bg-dark-surface',
+    'shadow-panel dark:shadow-panel-dark',
+  ].join(' ');
+
+  const sectionHeadingCls = 'text-xs font-semibold uppercase tracking-widest text-brand-500 dark:text-brand-400 mb-3';
+  const borderCls = 'border-surface-border dark:border-dark-border';
+
   return (
     <>
-      <div
-        className="fixed inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-sm z-40"
-        aria-hidden="true"
-        onClick={onClose}
-      />
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label="ShelterLink information panel"
-        tabIndex={-1}
-        className="panel-open fixed right-0 top-0 h-full w-full max-w-sm z-50 overflow-y-auto flex flex-col outline-none bg-surface-DEFAULT dark:bg-dark-surface shadow-panel dark:shadow-panel-dark"
-      >
-        <div className="flex items-center justify-between px-6 py-5 border-b border-surface-border dark:border-dark-border">
+      <div className="fixed inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-sm z-40" aria-hidden="true" onClick={onClose} />
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-label="ShelterLink information panel" tabIndex={-1} className={panelCls}>
+
+        {/* Header */}
+        <div className={`flex items-center justify-between px-6 py-5 border-b ${borderCls}`}>
           <div className="flex items-center gap-2">
             <span className="text-2xl" aria-hidden="true">🏠</span>
             <span className="text-lg font-bold text-text-DEFAULT dark:text-dark-text">ShelterLink</span>
@@ -72,15 +72,44 @@ export function InfoPanel({ open, onClose }: Props) {
           </button>
         </div>
 
+        {/* Body */}
         <div className="flex-1 px-6 py-5 space-y-8 text-sm text-text-muted dark:text-dark-muted">
+
           <section>
             <p className="text-base leading-relaxed text-text-DEFAULT dark:text-dark-text">
               ShelterLink connects shelter staff, volunteers, and donors in real time — no app, no account needed.
             </p>
           </section>
 
+          <section aria-labelledby="panel-nav">
+            <h2 id="panel-nav" className={sectionHeadingCls}>Pages</h2>
+            <nav>
+              <ul className="space-y-1">
+                {[
+                  { href: '/', icon: '🏠', label: 'All Shelters', desc: 'Live capacity across every shelter' },
+                  { href: '/supply-drive', icon: '📦', label: 'Supply Drive', desc: 'Top needed items right now' },
+                ].map(({ href, icon, label, desc }) => (
+                  <li key={href}>
+                    <a
+                      href={href}
+                      className="flex items-center gap-3 px-3 py-2 rounded-lg
+                        hover:bg-surface-subtle dark:hover:bg-dark-elevated
+                        focus:outline-none focus:ring-2 focus:ring-brand-500 transition-colors"
+                    >
+                      <span className="text-lg" aria-hidden="true">{icon}</span>
+                      <div>
+                        <p className="text-sm font-medium text-text-DEFAULT dark:text-dark-text">{label}</p>
+                        <p className="text-xs text-text-subtle dark:text-dark-subtle">{desc}</p>
+                      </div>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          </section>
+
           <section aria-labelledby="panel-features">
-            <h2 id="panel-features" className="text-xs font-semibold uppercase tracking-widest text-brand-500 dark:text-brand-400 mb-3">Features</h2>
+            <h2 id="panel-features" className={sectionHeadingCls}>Features</h2>
             <ul className="space-y-3">
               {FEATURES.map(({ icon, title, desc }) => (
                 <li key={title} className="flex gap-3">
@@ -95,7 +124,7 @@ export function InfoPanel({ open, onClose }: Props) {
           </section>
 
           <section aria-labelledby="panel-howto">
-            <h2 id="panel-howto" className="text-xs font-semibold uppercase tracking-widest text-brand-500 dark:text-brand-400 mb-3">How to Use</h2>
+            <h2 id="panel-howto" className={sectionHeadingCls}>How to Use</h2>
             <ol className="space-y-3 list-none">
               {STEPS.map((text, i) => (
                 <li key={i} className="flex gap-3 items-start">
@@ -109,15 +138,15 @@ export function InfoPanel({ open, onClose }: Props) {
           </section>
 
           <section aria-labelledby="panel-sms">
-            <h2 id="panel-sms" className="text-xs font-semibold uppercase tracking-widest text-brand-500 dark:text-brand-400 mb-3">SMS Update Format</h2>
-            <code className="block bg-surface-subtle dark:bg-dark-elevated border border-surface-border dark:border-dark-border rounded-lg px-4 py-3 text-xs leading-relaxed text-text-DEFAULT dark:text-dark-text font-mono whitespace-pre-wrap">
+            <h2 id="panel-sms" className={sectionHeadingCls}>SMS Update Format</h2>
+            <code className={`block bg-surface-subtle dark:bg-dark-elevated border ${borderCls} rounded-lg px-4 py-3 text-xs leading-relaxed text-text-DEFAULT dark:text-dark-text font-mono whitespace-pre-wrap`}>
               {`BEDS 12/50 STATUS open\nNEEDS blankets:high, water:critical\nFULFILLED socks`}
             </code>
             <p className="mt-2 text-xs text-text-faint dark:text-dark-subtle">Case-insensitive. Only BEDS is required.</p>
           </section>
 
           <section aria-labelledby="panel-contact">
-            <h2 id="panel-contact" className="text-xs font-semibold uppercase tracking-widest text-brand-500 dark:text-brand-400 mb-3">Contact</h2>
+            <h2 id="panel-contact" className={sectionHeadingCls}>Contact</h2>
             <ul className="space-y-2 text-xs">
               <li className="flex items-center gap-2">
                 <span aria-hidden="true">✉️</span>
@@ -137,11 +166,14 @@ export function InfoPanel({ open, onClose }: Props) {
               </li>
             </ul>
           </section>
+
         </div>
 
-        <div className="px-6 py-4 border-t border-surface-border dark:border-dark-border text-xs text-text-faint dark:text-dark-subtle">
+        {/* Footer */}
+        <div className={`px-6 py-4 border-t ${borderCls} text-xs text-text-faint dark:text-dark-subtle`}>
           ShelterLink — Build for Impact · MIT License
         </div>
+
       </div>
     </>
   );
