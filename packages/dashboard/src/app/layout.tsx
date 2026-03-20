@@ -2,6 +2,12 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { Header } from '@/components/Header';
+import dynamic from 'next/dynamic';
+
+const AlertToast = dynamic(
+  () => import('@/components/AlertToast').then((m) => m.AlertToast),
+  { ssr: false }
+);
 
 export const metadata: Metadata = {
   title: 'ShelterLink — Real-time shelter capacity',
@@ -14,6 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen text-gray-900 dark:text-gray-100">
         <ThemeProvider>
           <Header />
+          <AlertToast />
           {/* Hero welcome banner — home page only via CSS, always rendered for SSR */}
           <div className="bg-gradient-to-r from-brand-500 to-amber-400 dark:from-brand-800 dark:to-brand-700 text-white">
             <div className="max-w-5xl mx-auto px-4 py-8 sm:py-10">

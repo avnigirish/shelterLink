@@ -124,6 +124,15 @@ a, button, [role="button"],
   animation-delay: 0.3s;
 }
 
+/* Toast slide-in from right */
+@keyframes toast-in {
+  from { transform: translateX(110%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+.animate-slide-in {
+  animation: toast-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 /* ─── Focus ring ─────────────────────────────────────────────────────────── */
 :focus-visible {
   outline: 2px solid #f97316;
