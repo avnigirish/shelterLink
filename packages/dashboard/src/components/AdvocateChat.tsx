@@ -24,6 +24,7 @@ export function AdvocateChat({ shelterId, context = 'home' }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
+  const [acting, setActing] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -39,17 +40,22 @@ export function AdvocateChat({ shelterId, context = 'home' }: Props) {
     if (!text.trim() || streaming) return;
     const userMsg = text.trim();
     setInput('');
+
+    // Capture history BEFORE adding new messages (completed turns only)
+    const history = messages.filter((m) => m.text.trim() !== '');
+
     setMessages((prev) => [...prev, { role: 'user', text: userMsg }]);
     setStreaming(true);
+    setActing(false);
 
-    // Add empty advocate message to stream into
+    // Add empty advocate message to fill in
     setMessages((prev) => [...prev, { role: 'advocate', text: '' }]);
 
     try {
       const res = await fetch('/api/advocate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMsg, shelterId, context }),
+        body: JSON.stringify({ message: userMsg, shelterId, context, history }),
       });
 
       if (!res.ok) {
@@ -64,7 +70,7 @@ export function AdvocateChat({ shelterId, context = 'home' }: Props) {
 
       const contentType = res.headers.get('content-type') ?? '';
 
-      // Streaming SSE response
+      // Streaming SSE response (legacy path)
       if (contentType.includes('text/event-stream') && res.body) {
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
@@ -99,8 +105,16 @@ export function AdvocateChat({ shelterId, context = 'home' }: Props) {
           }
         }
       } else {
-        // Fallback JSON response
-        const json = await res.json() as { text?: string };
+        // Agentic JSON response
+        const json = await res.json() as { text?: string; toolUsed?: string };
+
+        // Show "Taking action…" briefly if a tool was used
+        if (json.toolUsed) {
+          setActing(true);
+          await new Promise((r) => setTimeout(r, 600));
+          setActing(false);
+        }
+
         setMessages((prev) => {
           const updated = [...prev];
           updated[updated.length - 1] = { role: 'advocate', text: json.text ?? 'No response.' };
@@ -118,6 +132,7 @@ export function AdvocateChat({ shelterId, context = 'home' }: Props) {
       });
     } finally {
       setStreaming(false);
+      setActing(false);
     }
   }
 
@@ -233,9 +248,15 @@ export function AdvocateChat({ shelterId, context = 'home' }: Props) {
                     </ReactMarkdown>
                   ) : (
                     <span className="flex gap-1 items-center text-text-faint dark:text-dark-subtle">
-                      <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: '300ms' }} />
+                      {acting ? (
+                        <span className="text-brand-400 dark:text-brand-300">Taking action…</span>
+                      ) : (
+                        <>
+                          <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: '0ms' }} />
+                          <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: '150ms' }} />
+                          <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </>
+                      )}
                     </span>
                   )}
                 </div>

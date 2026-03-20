@@ -244,28 +244,125 @@ CONSTRAINTS: Only reference shelters in the data above. Never fabricate bed coun
 | Community chat summary | DynamoDB `shelterlink-chat` (last 20 msgs) | Summarize activity, surface coordination needs |
 | New user onboarding | Static mission copy | Explain Build for Impact, walk through steps |
 | Critical needs explanation | `needsList` priorities | Contextualize urgency in human terms |
+| **Pledge donation (agentic)** | `shelterlink-donations` DynamoDB write | Execute via `PledgeTool` — no UI navigation required |
+| **Alert shelter staff (agentic)** | `shelterlink-chat` DynamoDB write | Execute via `AlertTool` — posts coordination message to shelter room |
+
+---
+
+### Agentic Tool Definitions
+
+The Advocate operates as an agent with two callable tools. When the model determines a user wants to take action (not just get information), it invokes the appropriate tool rather than returning a text suggestion.
+
+#### `PledgeTool`
+
+Writes a donation pledge directly to DynamoDB on behalf of the user. Eliminates the need to navigate to `/donate/<shelterId>`.
+
+```typescript
+// Tool definition passed to Bedrock Converse API
+{
+  name: 'PledgeTool',
+  description: 'Create a donation pledge for a specific shelter and item. Use this when the user expresses intent to donate a specific item (e.g., "I want to donate coats", "Help me donate these blankets").',
+  inputSchema: {
+    json: {
+      type: 'object',
+      properties: {
+        shelterId:   { type: 'string', description: 'The shelter ID to pledge to' },
+        item:        { type: 'string', description: 'The item being donated (e.g., "winter coats", "blankets")' },
+        quantity:    { type: 'number', description: 'Estimated quantity (default 1 if not specified)' },
+        donorName:   { type: 'string', description: 'Donor name or "Anonymous" if not provided' },
+      },
+      required: ['shelterId', 'item'],
+    },
+  },
+}
+```
+
+**Execution:** The API route intercepts the tool call, writes to `shelterlink-donations` (`PK=USER#anonymous`, `SK=DONATION#<uuid>`), then feeds the result back to the model to generate a confirmation message.
+
+#### `AlertTool`
+
+Posts a coordination message to a shelter's Community Chat room. Used when the user wants to notify shelter staff or coordinate with other volunteers.
+
+```typescript
+{
+  name: 'AlertTool',
+  description: 'Post a coordination message to a shelter\'s community chat. Use this when the user wants to alert shelter staff or coordinate with other volunteers (e.g., "Let them know I\'m coming", "Tell the shelter I have supplies").',
+  inputSchema: {
+    json: {
+      type: 'object',
+      properties: {
+        shelterId: { type: 'string', description: 'The shelter ID to post to' },
+        message:   { type: 'string', description: 'The coordination message to post' },
+      },
+      required: ['shelterId', 'message'],
+    },
+  },
+}
+```
+
+**Execution:** Writes to `shelterlink-chat` (`PK=ROOM#<shelterId>`, `SK=MSG#<timestamp>`) with `senderName="Community Advocate"` and `userType="advocate"`. AppSync subscriptions push the message to all connected clients in that room in real time.
+
+---
+
+### Agentic API Route — Updated Flow
+
+The `/api/advocate` route switches from `InvokeModelWithResponseStream` to the **Bedrock Converse API** (`ConverseCommand`) to support tool use. The agentic loop:
+
+```
+1. User: "Help me donate these coats"
+2. POST /api/advocate → build system prompt + tool definitions
+3. Bedrock Converse → model returns toolUse block: PledgeTool({ shelterId, item: "coats", quantity: 1 })
+4. API route executes PledgeTool → writes pledge to DynamoDB
+5. Feed tool result back to Bedrock: { pledgeId, shelter, item, status: "confirmed" }
+6. Bedrock generates final confirmation message
+7. Stream confirmation to browser
+```
+
+The model decides autonomously whether to call a tool or respond with text. Tool calls are transparent to the user — the chat shows a brief "Taking action…" indicator while the tool executes, then the model's confirmation message.
 
 ### CDK Changes Required
 
 ```typescript
-// New Bedrock IAM permission on the advocate Lambda/Next.js role
+// IAM: Bedrock Converse + tool execution permissions
 new iam.PolicyStatement({
-  actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
-  resources: ['arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'],
+  actions: [
+    'bedrock:InvokeModel',
+    'bedrock:InvokeModelWithResponseStream',
+    'bedrock:Converse',
+  ],
+  resources: ['*'],
+})
+
+// IAM: DynamoDB write for PledgeTool and AlertTool
+new iam.PolicyStatement({
+  actions: ['dynamodb:PutItem', 'dynamodb:UpdateItem'],
+  resources: [
+    donationsTable.tableArn,
+    chatTable.tableArn,
+  ],
 })
 ```
 
 Environment variable added to dashboard: `BEDROCK_REGION=us-east-1`
 
-### Data Flow
+### Data Flow — Agentic Pledge
 
-1. User types "I have winter coats — which shelter needs them most?"
+1. User types "Help me donate these coats"
 2. `AdvocateChat` POSTs to `/api/advocate` with `{ message, context: 'home' }`
-3. API route fetches all shelters from DynamoDB, filters for `OPEN` status and `winter coats` in needsList
-4. Builds system prompt with live shelter data injected
-5. Calls `bedrock:InvokeModelWithResponseStream` — Claude 3.5 Sonnet
-6. Streams tokens back to browser; component renders incrementally
-7. Response: "Central Union Mission in DC has winter coats listed as CRITICAL right now — they have 25 beds open and are actively accepting donations. Head to their detail page to pledge or check the community chat for drop-off coordination."
+3. API route fetches shelters, builds system prompt + tool definitions
+4. Calls Bedrock `ConverseCommand` — model identifies donation intent
+5. Model returns `toolUse: PledgeTool({ shelterId: "central-union-dc", item: "coats", quantity: 1 })`
+6. API route writes pledge to `shelterlink-donations` DynamoDB table
+7. Feeds `toolResult` back to Bedrock with pledge confirmation
+8. Model generates: "Done — I've pledged your coats to Central Union Mission in DC. They have winter coats listed as CRITICAL right now. Check the community chat for drop-off timing."
+9. Response streamed to browser
+
+### Data Flow — Agentic Alert
+
+1. User types "Tell the shelter I'm bringing supplies tomorrow morning"
+2. Model returns `toolUse: AlertTool({ shelterId: "...", message: "Volunteer incoming with supplies tomorrow morning" })`
+3. API route writes to `shelterlink-chat` — AppSync pushes to all connected clients
+4. Model confirms: "Done — I've posted a message to the shelter's community chat. Staff and other volunteers will see it in real time."
 
 ---
 

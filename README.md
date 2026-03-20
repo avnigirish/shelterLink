@@ -55,10 +55,58 @@ Browser (AdvocateChat component)
 
 **Setup:**
 1. Set `BEDROCK_REGION=us-east-1` in `packages/dashboard/.env.local`
-2. Attach an IAM policy to your user/role with `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream` on `"Resource": "*"`
+2. Attach an IAM policy to your user/role with `bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream`, and `bedrock:Converse` on `"Resource": "*"`
 3. Enable Amazon Nova Pro in the Bedrock console under Model access (no use case form required)
 
 > **Model note:** Amazon Nova Pro (`amazon.nova-pro-v1:0`) requires no Anthropic use case approval and is available immediately in new AWS accounts. Claude models require submitting an Anthropic use case form before first use.
+
+---
+
+## Agentic AI — Reducing Time-to-Impact
+
+### The Shift: From Search-Based UI to Action-Based AI
+
+Traditional donation platforms require donors to navigate a multi-step funnel: browse shelters → find a match → open a form → fill it out → submit. Every step is friction. Every step loses people.
+
+ShelterLink's Agentic AI Advocate collapses that funnel to a single natural language message.
+
+> "Help me donate these coats" → pledge created, shelter notified, donor confirmed — in one turn.
+
+This is the core 2026 Agentic AI pattern: **the model doesn't just answer questions, it takes actions**.
+
+### How It Works
+
+The Advocate uses the **Bedrock Converse API** with two callable tools:
+
+| Tool | What it does | When the model uses it |
+|---|---|---|
+| `PledgeTool` | Writes a donation pledge to DynamoDB | User expresses donation intent |
+| `AlertTool` | Posts a coordination message to shelter's Community Chat | User wants to notify staff or volunteers |
+
+The agentic loop:
+```
+User message → Bedrock Converse (with tool definitions)
+  → Model decides: answer with text OR call a tool
+  → If tool: API route executes it (DynamoDB write)
+  → Tool result fed back to model
+  → Model generates confirmation message
+  → Response returned to browser
+```
+
+The model decides autonomously whether to call a tool. No routing logic, no intent classifiers — the model reads the user's message and acts.
+
+### Time-to-Impact Comparison
+
+| Workflow | Steps | Time |
+|---|---|---|
+| Traditional UI | Browse → Filter → Open shelter → Find form → Fill out → Submit | ~4–6 minutes |
+| Agentic Advocate | Type one message → Done | ~15 seconds |
+
+### Process Transparency
+
+The chat shows a "Taking action…" indicator while tools execute, so users always know when the Advocate is doing something vs. just responding. Every tool action is confirmed in the model's reply with specifics: what was pledged, to which shelter, what happens next.
+
+This transparency is intentional — agentic systems that act silently erode trust. The Advocate shows its work.
 
 ---
 
