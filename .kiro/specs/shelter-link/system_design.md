@@ -1,368 +1,609 @@
-# System Design — ShelterLink (Pivoted Architecture)
+# System Design — ShelterLink
 
-## Architecture Overview
+## Overview
 
-ShelterLink uses a fully serverless, event-driven architecture on AWS. The original Pinpoint SMS gateway has been replaced with a **Lambda Function URL** as a public webhook endpoint, enabling direct HTTP-based status updates from a web form or SMS simulator. AWS AppSync provides real-time GraphQL subscriptions for the Community Chat feature.
+ShelterLink is a real-time shelter capacity tracking platform built on a fully serverless AWS architecture. Non-technical shelter staff submit structured updates via a web form or SMS simulator; those updates are parsed, persisted, and pushed to a public Next.js dashboard within seconds. Volunteers, donors, and community members can browse live shelter state, coordinate via community chat, pledge donations, and interact with an AI Community Advocate — all without creating an account.
+
+The architecture pivots away from AWS Pinpoint (pending SMS sandbox approval) and uses a **Lambda Function URL** as the public ingestion endpoint. AWS AppSync provides real-time GraphQL subscriptions for Community Chat. Amazon Bedrock (Claude / Nova) powers the AI Advocate with agentic tool execution.
+
+---
+
+## Architecture
 
 ```
 Web Form / SMS Simulator
   → Lambda Function URL (Update_Processor)
-  → AWS DynamoDB (Shelters table)
-  → Next.js Dashboard (SSE + AppSync subscriptions)
-  → Volunteer / Donor / Community Member (Browser)
+  → DynamoDB shelterlink-data (RECORD#CURRENT + LOG#<ts>)
+  → DynamoDB Stream → Stream Handler Lambda
+  → SSE /api/updates → Browser (ShelterList, shelter detail)
 
 Community Member (Browser)
-  → AWS AppSync (GraphQL Mutation)
-  → DynamoDB (CommunityChat table)
-  → AppSync Subscription → All connected clients (real-time)
+  → POST /api/chat/[shelterId]  (Next.js route → DynamoDB shelterlink-chat)
+  → AppSync Subscription onNewMessage → All connected clients (real-time)
 
-Admin (Browser)
-  → Next.js Admin Panel (GitHub OAuth)
-  → Lambda / DynamoDB (Inventory + Donations updates)
+Donor (Browser)
+  → POST /api/donations  (Next.js route → DynamoDB shelterlink-donations)
+  → Admin panel marks DELIVERED → PATCH /api/admin/donations/[id]
+
+Admin (Browser, GitHub OAuth)
+  → Next.js Admin Panel (NextAuth.js session guard)
+  → POST /api/admin/shelters  → DynamoDB registry entry
+  → PATCH /api/admin/shelters/[id]/inventory → DynamoDB UpdateItem
+
+Volunteer / Donor (Browser)
+  → POST /api/advocate  (Next.js route)
+  → Amazon Bedrock ConverseCommand (Nova Pro / Claude 3.5 Sonnet)
+  → PledgeTool → shelterlink-donations DynamoDB write
+  → AlertTool  → shelterlink-chat DynamoDB write + AppSync push
+```
+
+### Mermaid — High-Level Data Flow
+
+```mermaid
+flowchart TD
+    WF[Web Form / SMS Simulator] -->|POST JSON| LFU[Lambda Function URL]
+    LFU --> UP[Update_Processor Lambda]
+    UP -->|TransactWrite| DB[(shelterlink-data)]
+    DB -->|DynamoDB Stream| SH[Stream Handler Lambda]
+    SH -->|poll queue| SSE[/api/updates SSE]
+    SSE -->|text/event-stream| DASH[Next.js Dashboard]
+
+    CM[Community Member] -->|POST /api/chat| CHAT[(shelterlink-chat)]
+    CHAT -->|AppSync Subscription| DASH
+
+    DONOR[Donor] -->|POST /api/donations| DON[(shelterlink-donations)]
+    ADMIN[Admin] -->|PATCH status| DON
+
+    DASH -->|POST /api/advocate| ADV[Advocate API Route]
+    ADV -->|ConverseCommand| BR[Amazon Bedrock]
+    BR -->|PledgeTool| DON
+    BR -->|AlertTool| CHAT
 ```
 
 ---
 
-## Component Design
+## Components and Interfaces
 
 ### 1. Ingestion Endpoint — Lambda Function URL
 
-- Replaces AWS Pinpoint as the SMS/update ingestion point
-- Public HTTPS endpoint — no API Gateway required
-- Accepts JSON POST body: `{ phone, body }` where `body` is the SMS-format string
-- Validates sender phone against the shelter registry in DynamoDB
-- Parses the update body using the existing `Parser` module
-- Writes `RECORD#CURRENT` and `LOG#<timestamp>` to the Shelters table
-- Returns JSON confirmation or error response
-- Rate limiting enforced via DynamoDB (`RATELIMIT#<hashedPhone>`)
-- Environment variables: `SHELTER_TABLE`, `LOG_LEVEL`
+- Public HTTPS endpoint, no API Gateway required
+- Accepts `POST` with JSON body: `{ phone: string, body: string }`
+- CORS policy: `allowedOrigins` restricted to `NEXT_PUBLIC_ALLOWED_ORIGIN`
+- Auth type: `NONE` (public) — authorization enforced inside the handler via registry lookup
+- Returns `{ ok: true, confirmation: string }` on success
+- Returns `{ ok: false, error: string }` with appropriate HTTP status on failure
 
-> **Pinpoint note:** Pinpoint resources remain commented out in the CDK stack pending SMS sandbox approval. The Lambda Function URL provides equivalent ingest capability for demo and hackathon purposes.
+**Environment variables:**
+| Variable | Purpose |
+|---|---|
+| `SHELTER_TABLE` | DynamoDB table name (`shelterlink-data`) |
+| `AWS_REGION` | Explicit region (defaults to `us-east-1`) |
+| `LOG_LEVEL` | Powertools logger level |
+| `PINPOINT_APP_ID` | `PENDING` — Pinpoint disabled until sandbox approved |
 
-### 2. Update_Processor — AWS Lambda (TypeScript)
+### 2. Update_Processor Lambda
 
 - Runtime: Node.js 20.x, TypeScript compiled via esbuild
-- Triggered by Lambda Function URL (HTTP POST) **and** SQS (for future Pinpoint re-enable)
-- Responsibilities:
-  - Validate sender phone number against the shelter registry
-  - Parse update body using the `Parser` module
-  - Write or update the `Capacity_Record` and `Needs_List` in DynamoDB
-  - Write audit log entry with masked phone
-  - Return structured JSON response (confirmation or error)
-- IAM role: least-privilege, scoped to specific DynamoDB table ARN
+- Handles both Lambda Function URL (HTTP POST) and SQS (future Pinpoint re-enable)
+- Discriminated by `isFunctionUrlEvent()` type guard on the event shape
+- Processing pipeline:
+  1. Rate-limit check (`RATELIMIT#<hashedPhone>` in DynamoDB)
+  2. Registry lookup (`REGISTRY#<hashedPhone>` → `shelterId`)
+  3. Parse SMS body via `Parser` module
+  4. `TransactWrite`: `RECORD#CURRENT` + `LOG#<timestamp>` (90-day TTL)
+  5. Return confirmation string
+- Structured logging via `@aws-lambda-powertools/logger` — `maskPhone()` used on all log entries
+- Module-level DynamoDB client for warm-invocation reuse
 
-### 3. Community Chat — AWS AppSync (GraphQL)
+### 3. Parser Module (`packages/lambda/src/parser.ts`)
 
-- GraphQL API with DynamoDB data source (`CommunityChat` table)
-- Mutations: `sendMessage(roomId, senderName, message, userType)`
-- Queries: `getMessages(roomId, limit)`
-- Subscriptions: `onNewMessage(roomId)` — real-time push to all connected clients
-- Auth: API key for public read; Cognito or IAM for write (configurable)
-- Dashboard integrates AppSync JS client for subscription-based chat UI
+Parses the SMS-format update body into a `CapacityRecord`.
 
-### 4. Data_Store — AWS DynamoDB (Multi-Table)
+**Grammar:**
+```
+BEDS <current>/<total> [STATUS open|full|closed] [NEEDS <item>[:<priority>], ...] [FULFILLED <item>, ...]
+```
 
-Three tables (see `schema.md` for full attribute definitions):
+- `BEDS` is required; all other fields are optional
+- Case-insensitive, whitespace-tolerant (regex-based)
+- Priority defaults to `MEDIUM` if omitted
+- Status derived from occupancy if `STATUS` keyword absent (`beds >= capacity → FULL`)
+- Returns discriminated union: `{ ok: true; record: CapacityRecord } | { ok: false; error: string }`
 
-| Table | PK | SK | Purpose |
+### 4. Pretty Printer Module (`packages/lambda/src/prettyPrinter.ts`)
+
+Formats a `CapacityRecord` back into a human-readable confirmation string.
+
+- `formatConfirmation(record)` → `"Updated: BEDS 12/20 STATUS OPEN NEEDS blankets:HIGH, water:CRITICAL"`
+- `formatError(msg)` → `"Error: <msg>. Example: BEDS 12/20 NEEDS blankets:high, water:critical"`
+- Output is round-trip safe: `parse(formatConfirmation(record))` produces an equivalent `CapacityRecord`
+
+### 5. Stream Handler Lambda (`packages/lambda/src/streamHandler.ts`)
+
+- Triggered by DynamoDB Streams on `shelterlink-data` (`NEW_AND_OLD_IMAGES`)
+- Filters for `RECORD#CURRENT` changes only
+- Writes update payloads to a connections table for SSE polling
+- Batch size: 10, retry attempts: 2
+
+### 6. Dashboard — Next.js 14 App Router
+
+**Pages:**
+| Route | Type | Description |
+|---|---|---|
+| `/` | SSR + SSE | Public shelter list with real-time updates |
+| `/shelter/[id]` | SSR | Shelter detail: needs, inventory, chat, advocate |
+| `/admin` | SSR (auth-gated) | Registry management, inventory, donations |
+| `/donate/[shelterId]` | SSR | Public donation pledge form |
+| `/login` | SSR | GitHub OAuth login |
+
+**API Routes:**
+| Route | Method | Auth | Description |
 |---|---|---|---|
-| `shelterlink-shelters` | `SHELTER#<id>` | `RECORD#CURRENT` / `LOG#<ts>` | Shelter capacity, inventory, needs |
-| `shelterlink-chat` | `ROOM#<roomId>` | `MSG#<timestamp>` | Community chat messages |
-| `shelterlink-donations` | `USER#<userId>` | `DONATION#<donationId>` | User donation pledges |
+| `/api/updates` | GET | None | SSE stream of shelter updates |
+| `/api/chat/[shelterId]` | GET/POST | None | Community chat messages |
+| `/api/advocate` | POST | None (rate-limited) | AI Advocate |
+| `/api/donations` | POST | None | Submit pledge |
+| `/api/admin/shelters` | POST | Session | Add shelter to registry |
+| `/api/admin/shelters/[id]` | DELETE | Session | Remove shelter |
+| `/api/admin/shelters/[id]/inventory` | PATCH | Session | Update inventory |
+| `/api/admin/donations` | GET | Session | List all pledges |
+| `/api/admin/donations/[id]` | PATCH | Session | Mark pledge delivered |
 
-- DynamoDB Streams enabled on `shelterlink-shelters` for SSE push to dashboard
-- TTL on log entries: 90 days
-- TTL on chat messages: 30 days
+**Mock mode:** `USE_MOCK_DATA=true` bypasses all AWS calls. Mock stores (`mockShelterStore`, `mockChatStore`, `mockDonations`) are in-memory and mutable for local dev.
 
-### 5. Dashboard — Next.js 14 (TypeScript)
+### 7. Community Chat — AWS AppSync
 
-- Pages:
-  - `/` — public shelter list (SSR + SSE real-time updates)
-  - `/shelter/[id]` — shelter detail with Needs_List, Inventory, and Community Chat
-  - `/admin` — protected registry + inventory management (NextAuth.js session required)
-  - `/donate/[shelterId]` — donation pledge form (public)
-- Real-time shelter updates via SSE (`/api/updates`)
-- Real-time chat via AppSync GraphQL subscription
-- `USE_MOCK_DATA=true` bypasses all AWS calls for local development
+- GraphQL API with DynamoDB data source (`shelterlink-chat`)
+- Auth: API key (public read/write for demo; rotate before production)
+- Schema:
+  ```graphql
+  type ChatMessage { roomId: String!, timestamp: String!, senderName: String!, message: String!, userType: String! }
+  type Query    { getMessages(roomId: String!, limit: Int): [ChatMessage] }
+  type Mutation { sendMessage(roomId: String!, senderName: String!, message: String!, userType: String!): ChatMessage }
+  type Subscription { onNewMessage(roomId: String!): ChatMessage @aws_subscribe(mutations: ["sendMessage"]) }
+  ```
+- Dashboard also writes chat messages directly via `POST /api/chat/[shelterId]` (DynamoDB write) — AppSync subscription pushes to all connected clients
 
----
+### 8. AI Community Advocate
 
-## Data Flow
-
-### Web Form / SMS Simulator Update
-
-1. Operator submits form: `{ phone: "+15551234567", body: "BEDS 12/20 NEEDS blankets:high" }`
-2. POST to Lambda Function URL
-3. Lambda validates phone → looks up shelter in DynamoDB
-4. Parser extracts `beds=12`, `capacity=20`, `needs=[{item:'blankets',priority:'HIGH'}]`
-5. Lambda writes `RECORD#CURRENT` and `LOG#<timestamp>` to `shelterlink-shelters`
-6. DynamoDB Stream triggers SSE push → connected Dashboard clients receive update
-7. Lambda returns `{ ok: true, confirmation: "Updated: 12/20 beds. Needs: blankets (HIGH)." }`
-
-### Community Chat Message
-
-1. Community member types message in Dashboard chat panel
-2. AppSync mutation `sendMessage` fires
-3. AppSync writes to `shelterlink-chat` (`PK=ROOM#<shelterId>`, `SK=MSG#<timestamp>`)
-4. AppSync subscription `onNewMessage` pushes to all connected clients in that room
-5. Dashboard chat panel updates in real time
-
-### Donation Pledge
-
-1. Donor visits `/donate/<shelterId>` and submits pledge form
-2. POST to `/api/donations` — writes to `shelterlink-donations` table
-3. Admin panel shows pending pledges; admin marks as Delivered
-
-### Dashboard Load
-
-1. Browser requests `/` — Next.js SSR fetches all shelters from DynamoDB and renders HTML
-2. Client hydrates and opens SSE connection to `/api/updates`
-3. On DynamoDB Stream event, SSE endpoint pushes JSON patch to all connected clients
-4. React state updates, shelter cards re-render without full reload
+See dedicated section below.
 
 ---
 
-## Scalability
+## Data Models
 
-- Lambda Function URL scales automatically; no idle cost
-- DynamoDB on-demand billing handles traffic spikes without pre-provisioning
-- AppSync manages WebSocket connection state — no custom connection table needed for chat
-- SSE connections remain stateless per Lambda invocation
+### Types (shared between Lambda and Dashboard)
+
+```typescript
+type Priority      = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+type ShelterStatus = 'OPEN' | 'FULL' | 'CLOSED';
+type UserType      = 'VOLUNTEER' | 'DONOR' | 'STAFF' | 'ADMIN';
+type DonationStatus = 'PLEDGED' | 'IN_TRANSIT' | 'DELIVERED';
+
+interface NeedsItem     { item: string; priority: Priority; fulfilled?: boolean; }
+interface CapacityRecord { beds: number; capacity: number; status: ShelterStatus; needsList: NeedsItem[]; updatedAt?: string; }
+interface ShelterRecord  { shelterId: string; name: string; address: string; phone: string; state: string; website?: string; beds: number; capacity: number; status: ShelterStatus; needsList: NeedsItem[]; inventory: Record<string, number>; updatedAt: string; }
+interface ChatMessage    { roomId: string; timestamp: string; senderName: string; message: string; userType: UserType; }
+interface DonationRecord { userId: string; donationId: string; shelterId: string; shelterName: string; donorName: string; donorEmail: string; items: DonationItem[]; status: DonationStatus; pledgedAt: string; deliveredAt?: string; notes?: string; }
+```
+
+> Types are intentionally duplicated between `packages/lambda/src/types.ts` and `packages/dashboard/src/types/shelter.ts` — no shared package, keeping the Lambda bundle lean.
+
+### DynamoDB Tables
+
+**Table: `shelterlink-data`** (single-table for shelter state, registry, rate-limit)
+
+| PK | SK | Purpose |
+|---|---|---|
+| `SHELTER#<id>` | `RECORD#CURRENT` | Latest shelter state |
+| `SHELTER#<id>` | `LOG#<ISO-ts>` | Audit log entry (TTL: 90 days) |
+| `REGISTRY#<hashedPhone>` | `METADATA` | Phone → shelterId mapping |
+| `RATELIMIT#<hashedPhone>` | `ATTEMPTS` | Unauthorized attempt counter |
+
+- Streams: `NEW_AND_OLD_IMAGES` — triggers SSE push pipeline
+- Billing: PAY_PER_REQUEST
+- TTL attribute: `ttl`
+
+**Table: `shelterlink-chat`**
+
+| PK | SK | Key attributes |
+|---|---|---|
+| `ROOM#<shelterId>` | `MSG#<ISO-ts>` | `senderName`, `message`, `userType`, `ttl` (30 days) |
+
+**Table: `shelterlink-donations`**
+
+| PK | SK | Key attributes |
+|---|---|---|
+| `USER#<userId>` | `DONATION#<uuid>` | `shelterId`, `items`, `status`, `pledgedAt`, `deliveredAt` |
+
+- GSI `shelterlink-donations-by-shelter`: PK=`shelterId`, SK=`pledgedAt` — enables admin "all pledges for shelter X" query
+
+### Inventory
+
+Stored as a DynamoDB `Map` attribute on the `RECORD#CURRENT` item: `{ "blankets": 12, "water_bottles": 50 }`. Updated atomically via `UpdateItem` with `SET inventory.#item = :qty`.
+
+---
+
+## AI Community Advocate
+
+### Overview
+
+The AI Community Advocate is a conversational assistant embedded in the dashboard. It uses Amazon Bedrock (currently `amazon.nova-pro-v1:0`, designed for `claude-3-5-sonnet-20241022`) with the **Converse API** to support agentic tool execution. Every response is grounded in live DynamoDB shelter data — the model cannot fabricate shelter names, bed counts, or needs.
+
+```
+Browser (AdvocateChat component)
+  → POST /api/advocate  { message, shelterId?, context, history[] }
+  → Fetch shelter data from DynamoDB (or mock)
+  → Build system prompt with live shelter context
+  → Bedrock ConverseCommand (agentic loop, max 3 iterations)
+  → Tool execution: PledgeTool → shelterlink-donations, AlertTool → shelterlink-chat
+  → Return { text: string, toolUsed?: string }
+```
+
+### Request Shape
+
+```typescript
+POST /api/advocate
+{
+  message:   string,                          // user's message
+  shelterId?: string,                         // present on shelter detail pages
+  context:   'home' | 'shelter',
+  history?:  Array<{ role: 'user' | 'advocate'; text: string }> // last 10 turns
+}
+```
+
+### System Prompt Construction
+
+`buildShelterContext(shelters)` produces a structured block per shelter:
+```
+<name> (ID: <id>, <state>) — <status> — <beds>/<capacity> beds available
+  CRITICAL needs: <items>
+  HIGH needs: <items>
+  Inventory: <item>: <qty>, ...
+```
+
+The system prompt instructs the model to:
+- Only reference shelters in the context block
+- Rank suggestions CRITICAL first, then HIGH
+- End every response with a specific actionable next step
+- Use `PledgeTool` only after explicit user confirmation of intent to donate
+- Use `AlertTool` only when user explicitly asks to notify a shelter
+
+### Agentic Tools
+
+#### `PledgeTool`
+
+Writes a donation pledge to `shelterlink-donations` on behalf of the user.
+
+```typescript
+{
+  name: 'PledgeTool',
+  inputSchema: {
+    shelterId: string,   // required
+    item:      string,   // required
+    quantity?: number,   // default 1
+    donorName?: string,  // default 'Anonymous'
+  }
+}
+```
+
+Side effect: auto-posts a pledge notification to the shelter's community chat via `AlertTool`.
+
+#### `AlertTool`
+
+Posts a coordination message to a shelter's community chat room.
+
+```typescript
+{
+  name: 'AlertTool',
+  inputSchema: {
+    shelterId: string,  // required
+    message:   string,  // required
+  }
+}
+```
+
+Writes to `shelterlink-chat` with `senderName: 'Community Advocate'`, `userType: 'ADMIN'`.
+
+### Agentic Loop
+
+```
+1. Build messages array from history + current user message
+2. Call ConverseCommand with system prompt + tool definitions
+3. If stopReason === 'end_turn': extract text, strip <thinking> blocks, return
+4. If stopReason === 'tool_use': execute each tool, push toolResult, loop (max 3 iterations)
+5. On Bedrock error: return graceful fallback message (HTTP 200, no error details exposed)
+```
+
+### Rate Limiting
+
+In-memory map keyed by IP (`x-forwarded-for` → `x-real-ip` → `'unknown'`). 20 requests/minute per IP. Resets on Lambda cold start — sufficient for demo/hackathon scope. Returns HTTP 429 on breach.
+
+### IAM Requirements
+
+```typescript
+// Bedrock
+{ actions: ['bedrock:InvokeModel', 'bedrock:Converse'], resources: ['*'] }
+// DynamoDB writes for tools
+{ actions: ['dynamodb:PutItem', 'dynamodb:UpdateItem'], resources: [donationsTable.tableArn, chatTable.tableArn] }
+```
+
+---
+
+## Correctness Properties
+
+*A property is a characteristic or behavior that should hold true across all valid executions of a system — essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
+
+### Property 1: Parser round-trip
+
+*For any* valid `CapacityRecord`, formatting it with `formatConfirmation` then parsing the result with `parse` should produce an equivalent `CapacityRecord` (same beds, capacity, status, and active needs list).
+
+**Validates: Requirements 1.6**
+
+---
+
+### Property 2: Case and whitespace tolerance
+
+*For any* valid SMS update body, transforming it to uppercase, lowercase, or adding extra whitespace between tokens should produce the same parsed `CapacityRecord` as the original.
+
+**Validates: Requirements 1.5**
+
+---
+
+### Property 3: Unauthorized sender rejection
+
+*For any* phone number not present in the shelter registry, submitting an update via the Lambda Function URL should return HTTP 403 and leave the Data_Store unchanged.
+
+**Validates: Requirements 1.2, 8.1**
+
+---
+
+### Property 4: Default priority assignment
+
+*For any* needs item submitted without an explicit priority keyword, the parsed `NeedsItem` should have `priority === 'MEDIUM'`.
+
+**Validates: Requirements 3.3**
+
+---
+
+### Property 5: Needs list priority ordering
+
+*For any* shelter record with a non-empty `needsList`, the list displayed on the Dashboard should be ordered such that no item with a lower priority appears before an item with a higher priority (CRITICAL > HIGH > MEDIUM > LOW).
+
+**Validates: Requirements 3.1**
+
+---
+
+### Property 6: Needs filter correctness
+
+*For any* `needsList` and any selected priority filter, every item returned by the filter function should have a priority that matches the selected filter value.
+
+**Validates: Requirements 3.4**
+
+---
+
+### Property 7: Fulfilled needs removal
+
+*For any* SMS update containing a `FULFILLED` keyword, every item named in the `FULFILLED` segment should have `fulfilled: true` in the parsed `needsList`.
+
+**Validates: Requirements 3.5**
+
+---
+
+### Property 8: Phone masking invariant
+
+*For any* E.164 phone number, `maskPhone(phone)` should never return a string containing more than the last 4 digits of the original number, and should never equal the original phone string.
+
+**Validates: Requirements 8.4**
+
+---
+
+### Property 9: Rate-limit suppression
+
+*For any* phone number that has made 5 or more unauthorized attempts within the suppression window, subsequent calls to `checkRateLimit` should return `{ suppressed: true }`.
+
+**Validates: Requirements 8.3**
+
+---
+
+### Property 10: Donation record completeness
+
+*For any* pledge submission with valid inputs, the written `DonationRecord` should contain all required fields: `userId`, `donationId`, `shelterId`, `items` (non-empty), `status === 'PLEDGED'`, and `pledgedAt` (valid ISO timestamp).
+
+**Validates: Requirements 6.2, 6.3**
+
+---
+
+### Property 11: Donation query ordering
+
+*For any* set of donation records for a given shelter, querying via the GSI should return records in ascending `pledgedAt` order.
+
+**Validates: Requirements 6.4**
+
+---
+
+### Property 12: Chat message TTL
+
+*For any* chat message written to `shelterlink-chat`, the `ttl` attribute should equal approximately `floor(Date.now() / 1000) + 30 * 24 * 60 * 60` (within a 5-second tolerance).
+
+**Validates: Requirements 5.6**
+
+---
+
+### Property 13: Chat message field completeness
+
+*For any* `ChatMessage`, the rendered chat entry should contain the sender name, user type label, and a formatted timestamp.
+
+**Validates: Requirements 5.3**
+
+---
+
+### Property 14: Chat query limit
+
+*For any* shelter room with more than 50 messages, the `GET /api/chat/[shelterId]` endpoint should return at most 50 messages.
+
+**Validates: Requirements 5.4**
+
+---
+
+### Property 15: Advocate rate limit enforcement
+
+*For any* IP address, after 20 requests within a 60-second window, the 21st request to `POST /api/advocate` should return HTTP 429.
+
+**Validates: Requirements 10.9**
+
+---
+
+### Property 16: Advocate shelter context fidelity
+
+*For any* array of `ShelterRecord` objects passed to `buildShelterContext`, the resulting string should contain only shelter names, IDs, and needs items present in that array — no fabricated data.
+
+**Validates: Requirements 10.2, 10.5**
+
+---
+
+## Error Handling
+
+### Lambda Function URL
+
+| Condition | HTTP Status | Response |
+|---|---|---|
+| Invalid JSON body | 400 | `{ ok: false, error: 'Invalid JSON body' }` |
+| Missing `phone` or `body` fields | 400 | `{ ok: false, error: 'Missing required fields: phone, body' }` |
+| Parse failure | 400 | `{ ok: false, error: '<parser error message>' }` |
+| Unregistered phone | 403 | `{ ok: false, error: 'Request suppressed or unauthorized' }` |
+| Rate-limited | 403 | `{ ok: false, error: 'Request suppressed or unauthorized' }` |
+| DynamoDB error | 500 | `{ ok: false, error: 'Internal server error' }` |
+
+### Dashboard API Routes
+
+- Admin routes: 401 if no session, 403 if origin mismatch, 400 for missing fields
+- Chat POST: 400 if message is empty or missing
+- Donations POST: 400 for missing required fields
+- Advocate POST: 429 on rate limit, 400 for invalid body, 200 with fallback text on Bedrock error (never expose raw error details to client)
+
+### SSE Endpoint
+
+- Heartbeat every 15 seconds (`: heartbeat\n\n`) to keep connections alive through proxies
+- On DynamoDB poll error: logs error, continues polling — client retains last known state
+- Client-side: `useShelterUpdates` hook tracks `lastUpdated` timestamp; displays stale-data warning if no event received within threshold
+
+### Parser
+
+- Returns `{ ok: false, error: string }` for all invalid inputs — never throws
+- Caller always checks `result.ok` before accessing `result.record`
+- `formatError` wraps the error message with an example of the correct format
+
+---
+
+## Testing Strategy
+
+### Dual Testing Approach
+
+Both unit tests and property-based tests are required. They are complementary:
+- Unit tests catch concrete bugs with specific examples and edge cases
+- Property tests verify universal correctness across randomized inputs
+
+### Property-Based Testing
+
+Library: **`fast-check`** (used in both `packages/lambda` and `packages/dashboard`)
+
+- Minimum **100 iterations** per property test
+- Each property test references its design property via a comment tag:
+  ```typescript
+  // Feature: shelter-link, Property 1: Parser round-trip
+  ```
+- Each correctness property above maps to exactly one property-based test
+- Generators should cover edge cases: empty needs lists, zero beds, max capacity, all-whitespace items, unicode in shelter names
+
+**Key property test files:**
+| File | Properties covered |
+|---|---|
+| `packages/lambda/src/parser.roundtrip.test.ts` | P1, P2, P4, P7 |
+| `packages/lambda/src/needs.roundtrip.test.ts` | P5, P6 |
+| `packages/lambda/src/rateLimit.test.ts` | P9 |
+| `packages/lambda/src/registry.test.ts` | P3, P8 |
+| `packages/dashboard/src/lib/mockData.pbt.test.ts` | P10, P11, P16 |
+| `packages/dashboard/src/app/api/chat/[shelterId]/route.pbt.test.ts` | P12, P13, P14 |
+| `packages/dashboard/src/app/api/advocate/advocate.pbt.test.ts` | P15 |
+
+### Unit Testing
+
+Library: **Vitest** + `@testing-library/react` (dashboard), **Vitest** (lambda)
+
+Unit tests focus on:
+- Specific examples: known SMS strings → expected `CapacityRecord`
+- Integration points: API route handlers with mocked DynamoDB
+- Edge cases: empty needs list, zero capacity, FULFILLED items not in NEEDS list
+- Error conditions: Bedrock unavailable, DynamoDB timeout, malformed JSON body
+- Auth guard: admin routes return 401 without session
+
+**Key unit test files:**
+| File | Coverage |
+|---|---|
+| `packages/lambda/src/handler.test.ts` | Function URL path, SQS path, error cases |
+| `packages/lambda/src/logging.test.ts` | maskPhone, structured log output |
+| `packages/dashboard/src/app/api/advocate/advocate.test.ts` | Tool execution, fallback, rate limit |
+| `packages/dashboard/src/app/api/admin/shelters/[id]/route.test.ts` | Auth guard, CRUD |
+| `packages/dashboard/src/app/api/admin/shelters/[id]/inventory/route.test.ts` | Inventory update |
+| `packages/dashboard/src/components/NeedsFilter.test.tsx` | Filter UI |
+| `packages/dashboard/src/components/CommunityChat.test.tsx` | Chat rendering |
+| `packages/dashboard/src/hooks/useShelterUpdates.test.ts` | SSE hook |
+| `packages/dashboard/src/app/admin/page.test.tsx` | Admin page auth |
+| `packages/dashboard/src/lib/db.test.ts` | Mock/real data toggle |
+
+### Running Tests
+
+```bash
+# All packages
+npm run test --workspaces
+
+# Lambda only
+cd packages/lambda && npm run test
+
+# Dashboard only
+cd packages/dashboard && npm run test
+
+# With coverage
+cd packages/lambda && npm run coverage
+```
+
+Always use `vitest --run` (not watch mode) for CI.
 
 ---
 
 ## Security
 
 ### Input Validation
-- All POST body content treated as untrusted input
-- Parser uses strict regex; unmatched content rejected with error response
-- DynamoDB writes use typed attribute schemas
+- All POST body content treated as untrusted; parsed with strict regex
+- DynamoDB writes use typed attribute schemas — no dynamic key injection
+- Chat messages capped at 500 characters (enforced in AppSync schema and API route)
 
 ### CSRF & Origin Protection
-- Admin routes protected by NextAuth.js CSRF token validation
-- API routes validate `Origin` header against `NEXT_PUBLIC_ALLOWED_ORIGIN`
-- Lambda Function URL configured with CORS policy restricting allowed origins
+- Admin routes validate `Origin` header against `NEXT_PUBLIC_ALLOWED_ORIGIN`
+- NextAuth.js CSRF token validation on session-mutating routes
+- Lambda Function URL CORS policy restricts `allowedOrigins`
 
 ### Authorization
-- Shelter registry updates require authenticated admin session (GitHub OAuth)
-- Lambda execution role uses least-privilege IAM — no `*` resource ARNs
-- AppSync API key scoped to read-only; mutations require authenticated identity
+- Admin routes: `getServerSession(authOptions)` — return 401 if no session
+- Lambda execution role: least-privilege IAM, scoped to specific table ARNs
+- AppSync API key: public read/write for demo — rotate and scope before production
 
 ### Data Privacy
-- Phone numbers stored in DynamoDB are hashed (SHA-256 + salt) in audit log entries
-- Live registry stores E.164 format numbers; access restricted to Lambda role only
-- Phone numbers never appear in plaintext in CloudWatch logs (`maskPhone()`)
+- Phone numbers hashed (SHA-256) for all DynamoDB keys — raw E.164 never used as a key
+- `maskPhone()` used on all log entries — raw digits never appear in CloudWatch
+- Donor identity: `USER#anonymous` for advocate-initiated pledges
 
----
+### Region Configuration
 
-## Region Configuration
-
-All AWS SDK clients **must** initialize with an explicit region:
+All AWS SDK clients must include an explicit region:
 
 ```typescript
 new DynamoDBClient({ region: process.env['AWS_REGION'] ?? 'us-east-1' })
+new BedrockRuntimeClient({ region: process.env['BEDROCK_REGION'] ?? process.env['AWS_REGION'] ?? 'us-east-1' })
 ```
 
-This prevents silent region fallback to an incorrect default when `AWS_REGION` is not set in the Lambda execution environment.
-
----
-
----
-
-## AI Community Advocate — Agent Design
-
-### Overview
-
-The AI Community Advocate is a conversational assistant embedded in the ShelterLink dashboard. It uses Amazon Bedrock (Claude 3.5 Sonnet) to generate empathetic, action-oriented responses grounded in live shelter data from DynamoDB. It is not a general-purpose chatbot — every response is anchored to real shelter state.
-
-```
-Browser (AdvocateChat component)
-  → POST /api/advocate  (Next.js API route)
-  → Lambda advocate-handler  (Bedrock + DynamoDB)
-  → Amazon Bedrock — Claude 3.5 Sonnet (claude-3-5-sonnet-20241022)
-  → Structured JSON response → Browser
-```
-
-### Frontend Component — `AdvocateChat.tsx`
-
-- `'use client'` component, rendered on shelter detail pages and the home page
-- Floating chat bubble (bottom-right) — expands to a panel on click
-- Sends `POST /api/advocate` with `{ message: string, shelterId?: string, context: 'home' | 'shelter' }`
-- Streams response tokens via the Vercel AI SDK `useChat` hook (or plain `fetch` with `ReadableStream`)
-- Displays typing indicator while awaiting response
-- Starter prompts shown on first open:
-  - "I have blankets to donate — where should I go?"
-  - "What does this shelter need most right now?"
-  - "How can I help as a first-time volunteer?"
-
-### API Route — `POST /api/advocate`
-
-- Next.js App Router route handler (`src/app/api/advocate/route.ts`)
-- Accepts: `{ message: string, shelterId?: string, context: 'home' | 'shelter' }`
-- Steps:
-  1. Fetch relevant shelter data from DynamoDB (all shelters for `home` context; specific shelter for `shelter` context)
-  2. Build a structured system prompt (see below)
-  3. Call Bedrock `InvokeModelWithResponseStream` with Claude 3.5 Sonnet
-  4. Stream response back to client as `text/event-stream`
-- Auth: public (no session required) — rate-limited by IP via a lightweight DynamoDB counter
-- Error handling: returns a graceful fallback message if Bedrock is unavailable
-
-### Lambda — `advocate-handler` (optional dedicated function)
-
-For production, the Bedrock call can be extracted to a dedicated Lambda to keep the Next.js server lean. For hackathon scope, the API route handles it directly.
-
-### System Prompt Design
-
-The system prompt is assembled dynamically from live DynamoDB data:
-
-```
-You are the ShelterLink Community Advocate — an empathetic, grounded, and action-oriented assistant helping volunteers and donors make the most impact.
-
-Your mission: connect people with shelters that need them most, right now.
-
-CURRENT SHELTER DATA (as of <timestamp>):
-<shelter name> — <state> — <status> — <beds> beds available
-  Critical needs: <items>
-  High needs: <items>
-  Inventory: <items>
-
-CAPABILITIES:
-1. Suggest the best shelter(s) for a specific donation item
-2. Summarize recent community chat activity for a shelter
-3. Guide new users through how ShelterLink works and the Build for Impact mission
-4. Explain what "critical" vs "high" priority needs mean in practice
-
-TONE: Empathetic, grounded, and action-oriented. Never vague. Always end with a specific next step.
-CONSTRAINTS: Only reference shelters in the data above. Never fabricate bed counts or needs.
-```
-
-### Agent Capabilities
-
-| Capability | Data Source | Bedrock Role |
-|---|---|---|
-| Shelter matching by donation item | DynamoDB `needsList` scan | Rank and explain best matches |
-| Community chat summary | DynamoDB `shelterlink-chat` (last 20 msgs) | Summarize activity, surface coordination needs |
-| New user onboarding | Static mission copy | Explain Build for Impact, walk through steps |
-| Critical needs explanation | `needsList` priorities | Contextualize urgency in human terms |
-| **Pledge donation (agentic)** | `shelterlink-donations` DynamoDB write | Execute via `PledgeTool` — no UI navigation required |
-| **Alert shelter staff (agentic)** | `shelterlink-chat` DynamoDB write | Execute via `AlertTool` — posts coordination message to shelter room |
-
----
-
-### Agentic Tool Definitions
-
-The Advocate operates as an agent with two callable tools. When the model determines a user wants to take action (not just get information), it invokes the appropriate tool rather than returning a text suggestion.
-
-#### `PledgeTool`
-
-Writes a donation pledge directly to DynamoDB on behalf of the user. Eliminates the need to navigate to `/donate/<shelterId>`.
-
-```typescript
-// Tool definition passed to Bedrock Converse API
-{
-  name: 'PledgeTool',
-  description: 'Create a donation pledge for a specific shelter and item. Use this when the user expresses intent to donate a specific item (e.g., "I want to donate coats", "Help me donate these blankets").',
-  inputSchema: {
-    json: {
-      type: 'object',
-      properties: {
-        shelterId:   { type: 'string', description: 'The shelter ID to pledge to' },
-        item:        { type: 'string', description: 'The item being donated (e.g., "winter coats", "blankets")' },
-        quantity:    { type: 'number', description: 'Estimated quantity (default 1 if not specified)' },
-        donorName:   { type: 'string', description: 'Donor name or "Anonymous" if not provided' },
-      },
-      required: ['shelterId', 'item'],
-    },
-  },
-}
-```
-
-**Execution:** The API route intercepts the tool call, writes to `shelterlink-donations` (`PK=USER#anonymous`, `SK=DONATION#<uuid>`), then feeds the result back to the model to generate a confirmation message.
-
-#### `AlertTool`
-
-Posts a coordination message to a shelter's Community Chat room. Used when the user wants to notify shelter staff or coordinate with other volunteers.
-
-```typescript
-{
-  name: 'AlertTool',
-  description: 'Post a coordination message to a shelter\'s community chat. Use this when the user wants to alert shelter staff or coordinate with other volunteers (e.g., "Let them know I\'m coming", "Tell the shelter I have supplies").',
-  inputSchema: {
-    json: {
-      type: 'object',
-      properties: {
-        shelterId: { type: 'string', description: 'The shelter ID to post to' },
-        message:   { type: 'string', description: 'The coordination message to post' },
-      },
-      required: ['shelterId', 'message'],
-    },
-  },
-}
-```
-
-**Execution:** Writes to `shelterlink-chat` (`PK=ROOM#<shelterId>`, `SK=MSG#<timestamp>`) with `senderName="Community Advocate"` and `userType="advocate"`. AppSync subscriptions push the message to all connected clients in that room in real time.
-
----
-
-### Agentic API Route — Updated Flow
-
-The `/api/advocate` route switches from `InvokeModelWithResponseStream` to the **Bedrock Converse API** (`ConverseCommand`) to support tool use. The agentic loop:
-
-```
-1. User: "Help me donate these coats"
-2. POST /api/advocate → build system prompt + tool definitions
-3. Bedrock Converse → model returns toolUse block: PledgeTool({ shelterId, item: "coats", quantity: 1 })
-4. API route executes PledgeTool → writes pledge to DynamoDB
-5. Feed tool result back to Bedrock: { pledgeId, shelter, item, status: "confirmed" }
-6. Bedrock generates final confirmation message
-7. Stream confirmation to browser
-```
-
-The model decides autonomously whether to call a tool or respond with text. Tool calls are transparent to the user — the chat shows a brief "Taking action…" indicator while the tool executes, then the model's confirmation message.
-
-### CDK Changes Required
-
-```typescript
-// IAM: Bedrock Converse + tool execution permissions
-new iam.PolicyStatement({
-  actions: [
-    'bedrock:InvokeModel',
-    'bedrock:InvokeModelWithResponseStream',
-    'bedrock:Converse',
-  ],
-  resources: ['*'],
-})
-
-// IAM: DynamoDB write for PledgeTool and AlertTool
-new iam.PolicyStatement({
-  actions: ['dynamodb:PutItem', 'dynamodb:UpdateItem'],
-  resources: [
-    donationsTable.tableArn,
-    chatTable.tableArn,
-  ],
-})
-```
-
-Environment variable added to dashboard: `BEDROCK_REGION=us-east-1`
-
-### Data Flow — Agentic Pledge
-
-1. User types "Help me donate these coats"
-2. `AdvocateChat` POSTs to `/api/advocate` with `{ message, context: 'home' }`
-3. API route fetches shelters, builds system prompt + tool definitions
-4. Calls Bedrock `ConverseCommand` — model identifies donation intent
-5. Model returns `toolUse: PledgeTool({ shelterId: "central-union-dc", item: "coats", quantity: 1 })`
-6. API route writes pledge to `shelterlink-donations` DynamoDB table
-7. Feeds `toolResult` back to Bedrock with pledge confirmation
-8. Model generates: "Done — I've pledged your coats to Central Union Mission in DC. They have winter coats listed as CRITICAL right now. Check the community chat for drop-off timing."
-9. Response streamed to browser
-
-### Data Flow — Agentic Alert
-
-1. User types "Tell the shelter I'm bringing supplies tomorrow morning"
-2. Model returns `toolUse: AlertTool({ shelterId: "...", message: "Volunteer incoming with supplies tomorrow morning" })`
-3. API route writes to `shelterlink-chat` — AppSync pushes to all connected clients
-4. Model confirms: "Done — I've posted a message to the shelter's community chat. Staff and other volunteers will see it in real time."
+This prevents silent region fallback failures in Lambda and Next.js server components.
 
 ---
 
@@ -370,9 +611,21 @@ Environment variable added to dashboard: `BEDROCK_REGION=us-east-1`
 
 | Pillar | Implementation |
 |---|---|
-| Operational Excellence | CloudWatch alarms on Lambda errors and DynamoDB throttles; structured JSON logging |
-| Security | Least-privilege IAM, input validation, CSRF protection, phone number masking in logs |
-| Reliability | DynamoDB on-demand, Lambda retries on SQS, SSR fallback for Dashboard |
-| Performance Efficiency | Single-table DynamoDB design, SSE over polling, AppSync subscriptions for chat |
-| Cost Optimization | Serverless pay-per-use, DynamoDB TTL on logs and chat, no idle EC2 |
+| Operational Excellence | CloudWatch alarms on Lambda error rate, DLQ depth, DynamoDB throttles; structured JSON logging via Powertools |
+| Security | Least-privilege IAM, input validation, CSRF protection, phone masking, origin checks |
+| Reliability | DynamoDB on-demand, Lambda SQS retries with DLQ (14-day retention), SSR fallback for Dashboard |
+| Performance Efficiency | SSE over polling, AppSync subscriptions for chat, module-level SDK clients for Lambda warm reuse |
+| Cost Optimization | Serverless pay-per-use, DynamoDB TTL on logs (90d) and chat (30d), no idle EC2 |
 | Sustainability | No always-on compute; Lambda cold starts acceptable for update latency budget |
+
+---
+
+## Pinpoint Re-Enable Path
+
+Pinpoint resources are commented out in `packages/infra/lib/shelter-link-stack.ts` pending SMS sandbox approval.
+
+To re-enable:
+1. Request SMS sandbox access in AWS Console → Amazon Pinpoint
+2. Uncomment the `CfnApp`, `CfnSMSChannel`, IAM policy, and SSM parameter blocks in the CDK stack
+3. Set `PINPOINT_APP_ID` and `ORIGINATION_NUMBER` environment variables on the Lambda
+4. The SQS event source path in `handler.ts` is already wired and tested — no code changes required

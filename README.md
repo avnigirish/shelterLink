@@ -14,14 +14,19 @@ ShelterLink lets non-technical shelter staff submit capacity updates via a web f
 ```
 Web Form / SMS Simulator
   → Lambda Function URL (Update_Processor)
-  → AWS DynamoDB (Shelters table)
-  → Next.js Dashboard (SSE)
+  → DynamoDB shelterlink-data (RECORD#CURRENT + LOG#<ts>)
+  → DynamoDB Stream → Stream Handler Lambda
+  → SSE /api/updates → Next.js Dashboard
   → Volunteer / Donor (Browser)
 
-Community Member
-  → AWS AppSync (GraphQL Mutation)
-  → DynamoDB (Chat table)
-  → AppSync Subscription → All connected clients
+Community Member (Browser)
+  → POST /api/chat/[shelterId] → DynamoDB shelterlink-chat
+  → AppSync Subscription onNewMessage → All connected clients
+
+Volunteer / Donor (Browser)
+  → POST /api/advocate → Amazon Bedrock (Nova Pro)
+  → PledgeTool → shelterlink-donations
+  → AlertTool  → shelterlink-chat + AppSync push
 ```
 
 > **Pinpoint note:** AWS Pinpoint SMS requires sandbox approval on new accounts. Pinpoint resources are commented out in the CDK stack with `TODO` markers. The Lambda Function URL provides equivalent ingest capability for demo purposes. To re-enable: request SMS sandbox access in the AWS Console, then uncomment the Pinpoint block in `packages/infra/lib/shelter-link-stack.ts`.
@@ -42,10 +47,12 @@ ShelterLink includes an AI-powered Community Advocate built on Amazon Bedrock (A
 **Architecture:**
 ```
 Browser (AdvocateChat component)
-  → POST /api/advocate  (Next.js API route, streaming SSE)
-  → Amazon Bedrock — Amazon Nova Pro (amazon.nova-pro-v1:0)
-  → Live DynamoDB shelter data injected into system prompt
-  → Streaming token-by-token response → Browser
+  → POST /api/advocate  { message, shelterId?, context, history[] }
+  → Fetch live shelter data from DynamoDB (or mock store)
+  → Build system prompt with shelter context
+  → Bedrock ConverseCommand (agentic loop, max 3 iterations)
+  → Tool execution: PledgeTool → DynamoDB, AlertTool → chat
+  → Return { text: string, toolUsed?: string } → Browser
 ```
 
 **Example interaction:**
@@ -85,12 +92,14 @@ The Advocate uses the **Bedrock Converse API** with two callable tools:
 
 The agentic loop:
 ```
-User message → Bedrock Converse (with tool definitions)
+User message + conversation history (last 10 turns)
+  → Bedrock ConverseCommand (with tool definitions, max 3 iterations)
   → Model decides: answer with text OR call a tool
   → If tool: API route executes it (DynamoDB write)
-  → Tool result fed back to model
+  → Tool result fed back to model as toolResult content block
   → Model generates confirmation message
-  → Response returned to browser
+  → Strip any <thinking> blocks from output
+  → Return { text, toolUsed? } to browser
 ```
 
 The model decides autonomously whether to call a tool. No routing logic, no intent classifiers — the model reads the user's message and acts.
@@ -132,18 +141,19 @@ When the Advocate agent processes a donation pledge, it automatically posts a no
 
 ---
 
-## New Features (Pivot)
+## New Features
 
 | Feature | Description |
 |---|---|
-| Lambda Function URL | Public HTTPS endpoint replaces Pinpoint for update ingestion |
+| Lambda Function URL | Public HTTPS endpoint for update ingestion — replaces Pinpoint for demo/hackathon |
+| Real-Time Dashboard | SSE-powered shelter list updates within 5 seconds of any capacity change |
+| Prioritized Needs List | Per-shelter needs ranked CRITICAL → HIGH → MEDIUM → LOW, filterable without page reload |
+| Inventory Management | Shelter staff track current supply quantities via admin panel; atomic DynamoDB `UpdateItem` |
 | Community Chat | Real-time per-shelter chat via AWS AppSync GraphQL subscriptions |
-| Community Activity Feed | Pledge notifications auto-posted to chat by the Advocate agent |
-| Mock Community Members | 8 realistic user profiles with linked donation history |
-| Admin Community View | Member table with role badges, activity summaries, and donation links |
-| Inventory Management | Shelter staff track current supply quantities via admin panel |
-| Donation Tracking | Donors pledge supplies; admins mark pledges as delivered |
-| AI Community Advocate | Bedrock-powered assistant matches donors to shelters, summarizes chat, onboards new users |
+| Donation Tracking | Donors pledge supplies; admins mark pledges as delivered; full status history |
+| AI Community Advocate | Bedrock-powered agentic assistant — matches donors to shelters, executes pledges and chat alerts via tools |
+| Community Activity Feed | Pledge notifications auto-posted to shelter chat by the Advocate agent |
+| Admin Panel | GitHub OAuth-gated registry management, inventory editing, and donation oversight |
 
 ---
 
@@ -266,7 +276,7 @@ GITHUB_CLIENT_SECRET=
 ALLOWED_EMAILS=           # comma-separated allowed GitHub emails
 
 # AI Community Advocate
-BEDROCK_REGION=us-east-1  # must have bedrock:InvokeModelWithResponseStream on claude-3-5-sonnet
+BEDROCK_REGION=us-east-1  # must have bedrock:InvokeModel and bedrock:Converse on amazon.nova-pro-v1:0
 ```
 
 Lambda environment variables are set automatically by the CDK stack.
@@ -374,6 +384,7 @@ The pivot took less than a day because the spec documents absorbed the change cl
 | Generic color palette | WCAG 2.1 AA contrast-checked Tailwind tokens |
 | No test coverage | Vitest unit tests + property-based round-trip tests |
 | `any` types throughout | Explicit types with `unknown` + type guards |
+| Streaming-only AI responses | Agentic loop with tool execution + conversation history |
 
 ---
 
