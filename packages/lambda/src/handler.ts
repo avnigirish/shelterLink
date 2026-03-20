@@ -1,6 +1,6 @@
-import type { SQSEvent, SQSBatchResponse } from 'aws-lambda';
+import type { SQSEvent, SQSBatchResponse, APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
 import { PinpointClient, SendMessagesCommand } from '@aws-sdk/client-pinpoint';
 import { Logger } from '@aws-lambda-powertools/logger';
 
@@ -12,8 +12,10 @@ import { checkRateLimit, recordUnauthorizedAttempt } from './rateLimit';
 const logger = new Logger({ serviceName: 'shelter-link-update-processor' });
 
 // Module-level clients for connection reuse across warm invocations
-const dynamoClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
-const pinpointClient = new PinpointClient({});
+const dynamoClient = DynamoDBDocumentClient.from(
+  new DynamoDBClient({ region: process.env['AWS_REGION'] ?? 'us-east-1' }),
+);
+const pinpointClient = new PinpointClient({ region: process.env['AWS_REGION'] ?? 'us-east-1' });
 
 const SHELTER_TABLE = process.env['SHELTER_TABLE'] ?? '';
 const PINPOINT_APP_ID = process.env['PINPOINT_APP_ID'] ?? '';
@@ -33,6 +35,11 @@ interface SnsNotification {
 }
 
 async function sendSms(toPhone: string, body: string): Promise<void> {
+  // Pinpoint is disabled pending sandbox approval — skip silently
+  if (!PINPOINT_APP_ID || PINPOINT_APP_ID === 'PENDING') {
+    logger.info('Pinpoint disabled — skipping SMS reply', { body });
+    return;
+  }
   await pinpointClient.send(
     new SendMessagesCommand({
       ApplicationId: PINPOINT_APP_ID,
@@ -51,13 +58,11 @@ async function sendSms(toPhone: string, body: string): Promise<void> {
   );
 }
 
-async function processRecord(sqsBody: string): Promise<void> {
-  // Unwrap SNS → Pinpoint event
-  const snsNotification = JSON.parse(sqsBody) as SnsNotification;
-  const pinpointEvent = JSON.parse(snsNotification.Message) as PinpointSmsEvent;
-
-  const senderPhone = pinpointEvent.originationNumber;
-  const smsBody = pinpointEvent.messageBody;
+/**
+ * Core processing logic shared by both SQS and Function URL paths.
+ * Returns the confirmation string on success, or null for suppressed/unauthorized/parse-failure.
+ */
+async function processUpdate(senderPhone: string, smsBody: string): Promise<string | null> {
   const masked = maskPhone(senderPhone);
 
   logger.info('Inbound SMS received', { maskedPhone: masked });
@@ -66,7 +71,7 @@ async function processRecord(sqsBody: string): Promise<void> {
   const { suppressed } = await checkRateLimit(senderPhone, dynamoClient, SHELTER_TABLE);
   if (suppressed) {
     logger.info('Rate limit suppressed — no reply sent', { maskedPhone: masked });
-    return;
+    return null;
   }
 
   // Step 2: Registry check
@@ -78,7 +83,7 @@ async function processRecord(sqsBody: string): Promise<void> {
       senderPhone,
       'Your number is not authorized to submit updates. To register, contact your shelter administrator.',
     );
-    return;
+    return null;
   }
 
   // Step 3: Parse SMS
@@ -86,7 +91,7 @@ async function processRecord(sqsBody: string): Promise<void> {
   if (!parseResult.ok) {
     logger.info('Parse failure', { maskedPhone: masked, error: parseResult.error });
     await sendSms(senderPhone, formatError(parseResult.error));
-    return;
+    return null;
   }
 
   const record = parseResult.record;
@@ -138,9 +143,57 @@ async function processRecord(sqsBody: string): Promise<void> {
   await sendSms(senderPhone, confirmation);
 
   logger.info('Confirmation SMS sent', { maskedPhone: masked, shelterId });
+
+  return confirmation;
 }
 
-export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
+async function processRecord(sqsBody: string): Promise<void> {
+  // Unwrap SNS → Pinpoint event
+  const snsNotification = JSON.parse(sqsBody) as SnsNotification;
+  const pinpointEvent = JSON.parse(snsNotification.Message) as PinpointSmsEvent;
+  await processUpdate(pinpointEvent.originationNumber, pinpointEvent.messageBody);
+}
+
+function isFunctionUrlEvent(event: SQSEvent | APIGatewayProxyEventV2): event is APIGatewayProxyEventV2 {
+  return 'requestContext' in event && 'http' in (event as APIGatewayProxyEventV2).requestContext;
+}
+
+export const handler = async (
+  event: SQSEvent | APIGatewayProxyEventV2,
+): Promise<SQSBatchResponse | APIGatewayProxyResultV2> => {
+  // ── Function URL path ──────────────────────────────────────────────────────
+  if (isFunctionUrlEvent(event)) {
+    const rawBody = event.body ?? '';
+    let phone: string;
+    let body: string;
+
+    try {
+      const parsed = JSON.parse(rawBody) as Record<string, unknown>;
+      phone = typeof parsed['phone'] === 'string' ? parsed['phone'] : '';
+      body = typeof parsed['body'] === 'string' ? parsed['body'] : '';
+    } catch {
+      return { statusCode: 400, body: JSON.stringify({ ok: false, error: 'Invalid JSON body' }) };
+    }
+
+    if (!phone || !body) {
+      return { statusCode: 400, body: JSON.stringify({ ok: false, error: 'Missing required fields: phone, body' }) };
+    }
+
+    try {
+      const confirmation = await processUpdate(phone, body);
+      if (confirmation === null) {
+        return { statusCode: 403, body: JSON.stringify({ ok: false, error: 'Request suppressed or unauthorized' }) };
+      }
+      return { statusCode: 200, body: JSON.stringify({ ok: true, confirmation }) };
+    } catch (err) {
+      logger.error('Function URL processing error', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return { statusCode: 500, body: JSON.stringify({ ok: false, error: 'Internal server error' }) };
+    }
+  }
+
+  // ── SQS path ───────────────────────────────────────────────────────────────
   const batchItemFailures: { itemIdentifier: string }[] = [];
 
   for (const record of event.Records) {

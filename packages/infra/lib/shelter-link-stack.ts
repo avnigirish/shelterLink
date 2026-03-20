@@ -7,6 +7,7 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
+import * as appsync from 'aws-cdk-lib/aws-appsync';
 // import * as ssm from 'aws-cdk-lib/aws-ssm';       // re-enable with Pinpoint
 // import * as pinpoint from 'aws-cdk-lib/aws-pinpoint'; // re-enable with Pinpoint
 import { Construct } from 'constructs';
@@ -203,12 +204,79 @@ export class ShelterLinkStack extends cdk.Stack {
       exportName: 'ShelterLinkUpdateProcessorArn',
     });
 
+    // -------------------------------------------------------------------------
+    // Task 12.1 — Lambda Function URL (public HTTP endpoint, replaces Pinpoint for demo)
+    // -------------------------------------------------------------------------
+    const updateProcessorUrl = updateProcessor.addFunctionUrl({
+      authType: lambda.FunctionUrlAuthType.NONE,
+      cors: {
+        allowedOrigins: ['*'],
+        allowedMethods: [lambda.HttpMethod.POST],
+        allowedHeaders: ['Content-Type'],
+      },
+    });
+
+    new cdk.CfnOutput(this, 'UpdateProcessorFunctionUrl', {
+      value: updateProcessorUrl.url,
+      exportName: 'UpdateProcessorFunctionUrl',
+      description: 'Lambda Function URL for direct HTTP POST ingestion (demo/hackathon)',
+    });
+
     new cdk.CfnOutput(this, 'LambdaRoleArn', {
       value: lambdaRole.roleArn,
       exportName: 'ShelterLinkLambdaRoleArn',
     });
     // Note: PinpointAppId output is commented out until Pinpoint subscription is approved
     // new cdk.CfnOutput(this, 'PinpointAppId', { value: pinpointApp.ref, exportName: 'ShelterLinkPinpointAppId' });
+
+    // -------------------------------------------------------------------------
+    // Task 12.3 — Chat and Donations DynamoDB tables
+    // -------------------------------------------------------------------------
+    const chatTable = new dynamodb.Table(this, 'ShelterLinkChatTable', {
+      tableName: 'shelterlink-chat',
+      partitionKey: { name: 'PK', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'SK', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      timeToLiveAttribute: 'ttl',
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
+    const donationsTable = new dynamodb.Table(this, 'ShelterLinkDonationsTable', {
+      tableName: 'shelterlink-donations',
+      partitionKey: { name: 'PK', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'SK', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
+    // GSI: query all donations for a given shelter
+    donationsTable.addGlobalSecondaryIndex({
+      indexName: 'shelterlink-donations-by-shelter',
+      partitionKey: { name: 'shelterId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'pledgedAt', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    new cdk.CfnOutput(this, 'ChatTableName', {
+      value: chatTable.tableName,
+      exportName: 'ShelterLinkChatTableName',
+    });
+
+    new cdk.CfnOutput(this, 'DonationsTableName', {
+      value: donationsTable.tableName,
+      exportName: 'ShelterLinkDonationsTableName',
+    });
+
+    // Grant Lambda role access to new tables
+    lambdaRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'ChatDonationsTableAccess',
+      effect: iam.Effect.ALLOW,
+      actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:Query', 'dynamodb:Scan'],
+      resources: [
+        chatTable.tableArn, `${chatTable.tableArn}/index/*`,
+        donationsTable.tableArn, `${donationsTable.tableArn}/index/*`,
+      ],
+    }));
 
     // -------------------------------------------------------------------------
     // Task 10.2 — Stream handler Lambda with structured logging
@@ -243,6 +311,134 @@ export class ShelterLinkStack extends cdk.Stack {
 
     // Update the Update_Processor env to include LOG_LEVEL explicitly
     updateProcessor.addEnvironment('LOG_LEVEL', 'INFO');
+
+    // -------------------------------------------------------------------------
+    // Task 12.4 — AppSync GraphQL API for Community Chat
+    // -------------------------------------------------------------------------
+
+    // IAM role for AppSync to read/write the chat table
+    const appSyncRole = new iam.Role(this, 'AppSyncDynamoRole', {
+      assumedBy: new iam.ServicePrincipal('appsync.amazonaws.com'),
+    });
+    chatTable.grantReadWriteData(appSyncRole);
+
+    const chatApi = new appsync.CfnGraphQLApi(this, 'ShelterLinkChatApi', {
+      name: 'shelterlink-chat',
+      authenticationType: 'API_KEY',
+      xrayEnabled: false,
+    });
+
+    const chatApiKey = new appsync.CfnApiKey(this, 'ShelterLinkChatApiKey', {
+      apiId: chatApi.attrApiId,
+      description: 'ShelterLink Community Chat public API key',
+      // Expires 1 year from a fixed epoch — rotate before production
+      expires: Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60,
+    });
+
+    const chatSchema = new appsync.CfnGraphQLSchema(this, 'ShelterLinkChatSchema', {
+      apiId: chatApi.attrApiId,
+      definition: `
+        type ChatMessage {
+          roomId: String!
+          timestamp: String!
+          senderName: String!
+          message: String!
+          userType: String!
+        }
+
+        type Query {
+          getMessages(roomId: String!, limit: Int): [ChatMessage]
+        }
+
+        type Mutation {
+          sendMessage(roomId: String!, senderName: String!, message: String!, userType: String!): ChatMessage
+        }
+
+        type Subscription {
+          onNewMessage(roomId: String!): ChatMessage
+            @aws_subscribe(mutations: ["sendMessage"])
+        }
+
+        schema {
+          query: Query
+          mutation: Mutation
+          subscription: Subscription
+        }
+      `,
+    });
+
+    const chatDataSource = new appsync.CfnDataSource(this, 'ChatTableDataSource', {
+      apiId: chatApi.attrApiId,
+      name: 'ChatTableDataSource',
+      type: 'AMAZON_DYNAMODB',
+      dynamoDbConfig: {
+        tableName: chatTable.tableName,
+        awsRegion: this.region,
+      },
+      serviceRoleArn: appSyncRole.roleArn,
+    });
+
+    // Resolver: sendMessage mutation → PutItem
+    const sendMessageResolver = new appsync.CfnResolver(this, 'SendMessageResolver', {
+      apiId: chatApi.attrApiId,
+      typeName: 'Mutation',
+      fieldName: 'sendMessage',
+      dataSourceName: chatDataSource.name,
+      requestMappingTemplate: `{
+        "version": "2017-02-28",
+        "operation": "PutItem",
+        "key": {
+          "PK": $util.dynamodb.toDynamoDBJson("ROOM#$ctx.args.roomId"),
+          "SK": $util.dynamodb.toDynamoDBJson("MSG#$util.time.nowISO8601()")
+        },
+        "attributeValues": {
+          "roomId": $util.dynamodb.toDynamoDBJson($ctx.args.roomId),
+          "timestamp": $util.dynamodb.toDynamoDBJson($util.time.nowISO8601()),
+          "senderName": $util.dynamodb.toDynamoDBJson($ctx.args.senderName),
+          "message": $util.dynamodb.toDynamoDBJson($ctx.args.message),
+          "userType": $util.dynamodb.toDynamoDBJson($ctx.args.userType),
+          "ttl": $util.dynamodb.toDynamoDBJson($util.time.nowEpochSeconds() + 2592000)
+        }
+      }`,
+      responseMappingTemplate: `$util.toJson($ctx.result)`,
+    });
+    sendMessageResolver.addDependency(chatDataSource);
+    sendMessageResolver.addDependency(chatSchema);
+
+    // Resolver: getMessages query → Query (sort descending, limit N)
+    const getMessagesResolver = new appsync.CfnResolver(this, 'GetMessagesResolver', {
+      apiId: chatApi.attrApiId,
+      typeName: 'Query',
+      fieldName: 'getMessages',
+      dataSourceName: chatDataSource.name,
+      requestMappingTemplate: `{
+        "version": "2017-02-28",
+        "operation": "Query",
+        "query": {
+          "expression": "PK = :pk",
+          "expressionValues": {
+            ":pk": $util.dynamodb.toDynamoDBJson("ROOM#$ctx.args.roomId")
+          }
+        },
+        "scanIndexForward": false,
+        "limit": $util.defaultIfNull($ctx.args.limit, 50)
+      }`,
+      responseMappingTemplate: `$util.toJson($ctx.result.items)`,
+    });
+    getMessagesResolver.addDependency(chatDataSource);
+    getMessagesResolver.addDependency(chatSchema);
+
+    new cdk.CfnOutput(this, 'ChatApiEndpoint', {
+      value: chatApi.attrGraphQlUrl,
+      exportName: 'ShelterLinkChatApiEndpoint',
+      description: 'AppSync GraphQL endpoint for Community Chat',
+    });
+
+    new cdk.CfnOutput(this, 'ChatApiKey', {
+      value: chatApiKey.attrApiKey,
+      exportName: 'ShelterLinkChatApiKey',
+      description: 'AppSync API key for Community Chat (public read/write)',
+    });
 
     // -------------------------------------------------------------------------
     // Task 10.1 — CloudWatch Alarms

@@ -1,16 +1,26 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import { getShelterById } from '@/lib/db';
 import { PRIORITY_ORDER } from '@/types/shelter';
 import { NeedsFilter } from '@/components/NeedsFilter';
+import { InventoryPanel } from '@/components/InventoryPanel';
+import { CommunityChat } from '@/components/CommunityChat';
 
 export default async function ShelterDetailPage({ params }: { params: { id: string } }) {
-  const shelter = await getShelterById(params.id);
+  const [shelter, session] = await Promise.all([
+    getShelterById(params.id),
+    getServerSession(authOptions),
+  ]);
+
   if (!shelter) return notFound();
 
   const activeNeeds = shelter.needsList
     .filter((n) => !n.fulfilled)
     .sort((a, b) => PRIORITY_ORDER[b.priority] - PRIORITY_ORDER[a.priority]);
+
+  const isAdmin = !!session;
 
   return (
     <div className="max-w-2xl">
@@ -25,6 +35,25 @@ export default async function ShelterDetailPage({ params }: { params: { id: stri
         <h3 className="text-lg font-semibold text-text mb-3">Current Needs</h3>
         <NeedsFilter needs={activeNeeds} />
       </section>
+
+      <InventoryPanel
+        inventory={shelter.inventory}
+        shelterId={params.id}
+        isAdmin={isAdmin}
+      />
+
+      <div className="mt-8">
+        <CommunityChat shelterId={params.id} initialMessages={[]} />
+      </div>
+
+      <div className="mt-6">
+        <Link
+          href={`/donate/${params.id}`}
+          className="inline-block px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+        >
+          Pledge a Donation
+        </Link>
+      </div>
     </div>
   );
 }

@@ -97,41 +97,41 @@ Incremental implementation across 9 phases: infrastructure → Lambda processor 
 
 - [x] 11. Final Checkpoint — All tests pass (Phases 1–8)
 
-- [ ] 12. Phase 9 — Architecture Pivot
-  - [ ] 12.1 Add Lambda Function URL to CDK stack
+- [x] 12. Phase 9 — Architecture Pivot
+  - [x] 12.1 Add Lambda Function URL to CDK stack
     - Add `FunctionUrl` resource to `UpdateProcessor` Lambda with `authType: NONE`
     - Configure CORS: `allowOrigins: [process.env.ALLOWED_ORIGIN ?? '*']`, `allowMethods: [HttpMethod.POST]`
     - Export Function URL as CDK output
     - Update Lambda handler to accept both SQS envelope and raw HTTP POST `{ phone, body }`
     - _Requirements: 1.1, 1.7, 9.1_
 
-  - [ ] 12.2 Add explicit region to all SDK clients
+  - [x] 12.2 Add explicit region to all SDK clients
     - Update `handler.ts`, `registry.ts`, `rateLimit.ts`, `streamHandler.ts` to use `region: process.env['AWS_REGION'] ?? 'us-east-1'` in all client constructors
     - Update `packages/dashboard/src/lib/db.ts` and `registry.ts` to include explicit region
     - Update CDK stack `env` prop to pin `region: 'us-east-1'`
     - _Requirements: 9.1, 9.2, 9.3_
 
-  - [ ] 12.3 Add Chat and Donations DynamoDB tables to CDK stack
+  - [x] 12.3 Add Chat and Donations DynamoDB tables to CDK stack
     - Create `shelterlink-chat` table: `PK=ROOM#<shelterId>`, `SK=MSG#<timestamp>`, TTL=30 days
     - Create `shelterlink-donations` table: `PK=USER#<userId>`, `SK=DONATION#<donationId>`
     - Add GSI on `shelterlink-donations`: partition key `shelterId`, sort key `pledgedAt`
     - Export table names as CDK outputs
     - _Requirements: 5.6, 6.3_
 
-  - [ ] 12.4 Add AppSync GraphQL API to CDK stack
+  - [x] 12.4 Add AppSync GraphQL API to CDK stack
     - Create AppSync API with DynamoDB data source pointing to `shelterlink-chat`
     - Define schema: `sendMessage` mutation, `getMessages` query, `onNewMessage` subscription
     - Configure API key auth for public read; export endpoint URL and API key
     - _Requirements: 5.1, 5.2_
 
-  - [ ] 12.5 Extend DynamoDB types for inventory, chat, and donations
+  - [x] 12.5 Extend DynamoDB types for inventory, chat, and donations
     - Add `inventory: Record<string, number>` to `ShelterRecord` in `packages/dashboard/src/types/shelter.ts`
     - Add `ChatMessage` type: `{ roomId, timestamp, senderName, message, userType }`
     - Add `DonationRecord` type: `{ userId, donationId, shelterId, items, status, pledgedAt }`
     - Mirror relevant types in `packages/lambda/src/types.ts`
     - _Requirements: 4.1, 5.3, 6.3_
 
-  - [ ] 12.6 Implement Community Chat component (`src/components/CommunityChat.tsx`)
+  - [x] 12.6 Implement Community Chat component (`src/components/CommunityChat.tsx`)
     - `"use client"` component that subscribes to AppSync `onNewMessage(roomId)`
     - Load last 50 messages on mount via `getMessages` query
     - Display sender name, user type badge, message, and timestamp
@@ -140,41 +140,41 @@ Incremental implementation across 9 phases: infrastructure → Lambda processor 
     - `aria-live="polite"` on message list for screen reader announcements
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 7.4_
 
-  - [ ] 12.7 Implement Inventory panel (`src/components/InventoryPanel.tsx`)
+  - [x] 12.7 Implement Inventory panel (`src/components/InventoryPanel.tsx`)
     - Read-only view for volunteers/donors: item name + quantity, "Out of stock" for zero quantities
     - Admin edit mode: quantity input per item, save calls `PATCH /api/admin/shelters/[id]/inventory`
     - Integrate into shelter detail page (`src/app/shelter/[id]/page.tsx`)
     - _Requirements: 4.3, 4.4, 4.5_
 
-  - [ ] 12.8 Implement inventory admin API route
+  - [x] 12.8 Implement inventory admin API route
     - `PATCH /api/admin/shelters/[id]/inventory` — validate session + origin, call DynamoDB `UpdateItem` with `SET inventory.#item = :qty`
     - Use expression attribute names to handle arbitrary item name keys safely
     - _Requirements: 4.2, 4.5, 8.5_
 
-  - [ ] 12.9 Implement Donation pledge form and API
+  - [x] 12.9 Implement Donation pledge form and API
     - `src/app/donate/[shelterId]/page.tsx` — public SSR page with pledge form
     - `src/components/DonationForm.tsx` — `"use client"` form: donor name, email, items + quantities
     - `POST /api/donations` — write to `shelterlink-donations` table, return confirmation
     - Mock path: return success immediately when `USE_MOCK_DATA=true`
     - _Requirements: 6.1, 6.2, 6.3_
 
-  - [ ] 12.10 Add donation management to admin panel
+  - [x] 12.10 Add donation management to admin panel
     - Extend `src/app/admin/page.tsx` to show pending pledges per shelter (query GSI)
     - `PATCH /api/admin/donations/[donationId]` — mark pledge as `DELIVERED`, set `deliveredAt`
     - _Requirements: 6.4, 6.5_
 
-  - [ ] 12.11 Add "Mock-to-Prod" environment toggle hook
+  - [x] 12.11 Add "Mock-to-Prod" environment toggle hook
     - Create Kiro hook `.kiro/hooks/env-toggle.json` — `userTriggered` event
     - Hook action: `runCommand` that toggles `USE_MOCK_DATA` between `true` and `false` in `.env.local` and restarts the dev server
     - _Requirements: 9.4_
 
-  - [ ] 12.12 Write tests for pivot features
+  - [x] 12.12 Write tests for pivot features
     - Unit test Lambda Function URL handler path (HTTP POST envelope parsing)
     - Unit test inventory `UpdateItem` expression builder
     - Unit test donation API route (mock DynamoDB, assert correct PK/SK written)
     - _Requirements: 1.1, 4.2, 6.2_
 
-- [ ] 13. Final Checkpoint — Phase 9 complete
+- [x] 13. Final Checkpoint — Phase 9 complete
   - Run `vitest --run` in `packages/lambda` and `packages/dashboard`
   - Run CDK synth in `packages/infra` to validate stack compiles without errors
 

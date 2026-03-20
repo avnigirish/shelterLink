@@ -17,6 +17,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
       { item: 'canned food', priority: 'MEDIUM', fulfilled: false },
       { item: 'socks', priority: 'LOW', fulfilled: false },
     ],
+    inventory: { blankets: 5, 'water bottles': 12, 'canned food': 30 },
     updatedAt: new Date().toISOString(),
   },
   {
@@ -32,6 +33,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
       { item: 'baby formula', priority: 'HIGH', fulfilled: false },
       { item: 'hygiene kits', priority: 'MEDIUM', fulfilled: false },
     ],
+    inventory: { diapers: 0, 'baby formula': 2 },
     updatedAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
   },
   {
@@ -43,6 +45,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     capacity: 25,
     status: 'OPEN',
     needsList: [],
+    inventory: { blankets: 20, 'hygiene kits': 15, 'canned food': 50 },
     updatedAt: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
   },
   {
@@ -57,6 +60,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
       { item: 'volunteers', priority: 'HIGH', fulfilled: false },
       { item: 'cleaning supplies', priority: 'MEDIUM', fulfilled: false },
     ],
+    inventory: {},
     updatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
   },
 ];

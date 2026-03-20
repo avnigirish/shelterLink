@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Mock-to-Prod Toggle",
+  "description": "Manually toggle USE_MOCK_DATA between true and false in packages/dashboard/.env.local. When switching to PROD, also runs the EnvironmentSync verification to confirm DynamoDB is reachable.",
+  "version": "1.0.0",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Toggle the DATA_MODE and USE_MOCK_DATA environment variables in packages/dashboard/.env.local.\n\n## Steps\n\n1. Read packages/dashboard/.env.local\n\n2. Determine the current mode:\n   - If USE_MOCK_DATA=true (or DATA_MODE=MOCK or DATA_MODE is absent) → current mode is MOCK\n   - If USE_MOCK_DATA=false (or DATA_MODE=PROD) → current mode is PROD\n\n3. Toggle to the opposite mode:\n\n   **Switching MOCK → PROD:**\n   - Set USE_MOCK_DATA=false\n   - Set DATA_MODE=PROD\n   - Uncomment SHELTER_TABLE if it is commented out (remove the leading `#`)\n   - Report: \"Switched to PROD mode. Running environment verification...\"\n   - Then run: bash scripts/env-sync.sh\n   - Report the verification results (table exists, region set, credentials valid)\n\n   **Switching PROD → MOCK:**\n   - Set USE_MOCK_DATA=true\n   - Set DATA_MODE=MOCK\n   - Comment out SHELTER_TABLE (add `#` prefix if not already commented)\n   - Report: \"Switched to MOCK mode. No AWS credentials required. Restart the dev server to apply.\"\n\n4. After editing .env.local, remind the user:\n   - \"Restart the Next.js dev server (`npm run dev` in packages/dashboard) for the change to take effect.\"\n\n## Rules\n- Only edit packages/dashboard/.env.local — do not touch any other file\n- Preserve all other env vars exactly as-is\n- Do not expose raw credential values in chat output"
+  }
+}

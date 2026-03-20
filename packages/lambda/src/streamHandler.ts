@@ -7,7 +7,9 @@ import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 
 // LOG_LEVEL is read automatically by Powertools from process.env['LOG_LEVEL']
 const logger = new Logger({ serviceName: 'shelter-link-stream-handler' });
-const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const ddb = DynamoDBDocumentClient.from(
+  new DynamoDBClient({ region: process.env['AWS_REGION'] ?? 'us-east-1' }),
+);
 
 const CONNECTIONS_TABLE = process.env['CONNECTIONS_TABLE'] ?? '';
 
