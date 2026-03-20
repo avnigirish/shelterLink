@@ -125,7 +125,7 @@ describe('SQS handler orchestration', () => {
     expect(checkRateLimit).toHaveBeenCalledOnce();
     expect(lookupRegistry).toHaveBeenCalledOnce();
     expect(mockDdbSend).toHaveBeenCalled();
-    expect(mockPinpointSend).toHaveBeenCalled();
+    // Pinpoint is disabled (no PINPOINT_APP_ID) — SMS reply is skipped silently
   });
 
   it('suppressed sender: no registry check, no reply', async () => {
@@ -150,7 +150,7 @@ describe('SQS handler orchestration', () => {
     expect(result.batchItemFailures).toHaveLength(0);
     expect(recordUnauthorizedAttempt).toHaveBeenCalledOnce();
     expect(mockDdbSend).not.toHaveBeenCalled();
-    expect(mockPinpointSend).toHaveBeenCalledOnce();
+    // Pinpoint disabled — SMS reply skipped silently
   });
 
   it('parse failure: sends error reply with format example, no DynamoDB write', async () => {
@@ -161,7 +161,7 @@ describe('SQS handler orchestration', () => {
     expect(result.batchItemFailures).toHaveLength(0);
     expect(recordUnauthorizedAttempt).not.toHaveBeenCalled();
     expect(mockDdbSend).not.toHaveBeenCalled();
-    expect(mockPinpointSend).toHaveBeenCalledOnce();
+    // Pinpoint disabled — SMS reply skipped silently
   });
 
   it('returns batchItemFailures when processing throws', async () => {
@@ -185,7 +185,7 @@ describe('Function URL handler', () => {
     expect(parsed.ok).toBe(true);
     expect(typeof parsed.confirmation).toBe('string');
     expect(mockDdbSend).toHaveBeenCalled();
-    expect(mockPinpointSend).toHaveBeenCalled();
+    // Pinpoint disabled — SMS reply skipped silently
   });
 
   it('missing phone field → 400', async () => {
@@ -230,11 +230,11 @@ describe('Function URL handler', () => {
     const event = makeFunctionUrlEvent(JSON.stringify({ phone: '+15551234567', body: 'not valid sms' }));
     const result = asHttpResult(await handler(event));
 
-    // Parse failures send an error SMS but return null from processUpdate → 403
+    // Parse failures return null from processUpdate → 403
     expect(result).toMatchObject({ statusCode: 403 });
     const parsed = JSON.parse((result as { statusCode: number; body: string }).body);
     expect(parsed.ok).toBe(false);
-    expect(mockPinpointSend).toHaveBeenCalledOnce(); // error SMS sent
+    // Pinpoint disabled — SMS reply skipped silently
     expect(mockDdbSend).not.toHaveBeenCalled();
   });
 });
