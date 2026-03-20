@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useShelterUpdates } from '@/hooks/useShelterUpdates';
 import type { ShelterRecord, ShelterStatus } from '@/types/shelter';
@@ -27,6 +28,12 @@ const BAR_CLASSES: Record<ShelterStatus, string> = {
   FULL:   'bg-amber-500 dark:bg-amber-400',
   CLOSED: 'bg-red-500   dark:bg-red-400',
 };
+
+function pill(active: boolean) {
+  return active
+    ? 'px-3 py-1 rounded-full text-xs font-semibold bg-brand-500 text-white shadow-sm'
+    : 'px-3 py-1 rounded-full text-xs font-semibold bg-surface-subtle dark:bg-dark-elevated text-text-subtle dark:text-dark-muted hover:bg-surface-border dark:hover:bg-dark-border transition-colors';
+}
 
 function ShelterCard({ shelter }: { shelter: ShelterRecord }) {
   const occupancyPct =
@@ -64,6 +71,9 @@ function ShelterCard({ shelter }: { shelter: ShelterRecord }) {
             {STATUS_LABELS[shelter.status]}
           </span>
         </div>
+
+        {/* State tag */}
+        <p className="text-xs text-text-faint dark:text-dark-subtle font-medium">{shelter.state}</p>
 
         {/* Bed count */}
         <p className="text-sm text-text-muted dark:text-dark-muted">
@@ -118,14 +128,97 @@ function ShelterCard({ shelter }: { shelter: ShelterRecord }) {
 export function ShelterList({ initialShelters }: { initialShelters: ShelterRecord[] }) {
   const { shelters, status, lastUpdated } = useShelterUpdates(initialShelters);
   const isStale = status === 'disconnected' || status === 'stale';
-  const openCount = shelters.filter((s) => s.status === 'OPEN').length;
+
+  // Filter state
+  const [stateFilter, setStateFilter] = useState<string>('All');
+  const [statusFilter, setStatusFilter] = useState<string>('All');
+  const [criticalOnly, setCriticalOnly] = useState(false);
+  const [needsSearch, setNeedsSearch] = useState('');
+
+  // Derive available states from data
+  const availableStates = useMemo(() => {
+    const states = Array.from(new Set(shelters.map((s) => s.state))).sort();
+    return ['All', ...states];
+  }, [shelters]);
+
+  // Apply filters
+  const filtered = useMemo(() => {
+    return shelters.filter((s) => {
+      if (stateFilter !== 'All' && s.state !== stateFilter) return false;
+      if (statusFilter !== 'All' && s.status !== statusFilter) return false;
+      if (criticalOnly && !s.needsList.some((n) => !n.fulfilled && n.priority === 'CRITICAL')) return false;
+      if (needsSearch.trim()) {
+        const q = needsSearch.trim().toLowerCase();
+        if (!s.needsList.some((n) => n.item.toLowerCase().includes(q))) return false;
+      }
+      return true;
+    });
+  }, [shelters, stateFilter, statusFilter, criticalOnly, needsSearch]);
+
+  const openCount = filtered.filter((s) => s.status === 'OPEN').length;
 
   return (
     <>
+      {/* Filter bar */}
+      <div className="mb-6 space-y-3">
+        {/* State pills */}
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by state">
+          {availableStates.map((s) => (
+            <button key={s} onClick={() => setStateFilter(s)} className={pill(stateFilter === s)}>
+              {s}
+            </button>
+          ))}
+        </div>
+
+        {/* Status pills + critical toggle + search */}
+        <div className="flex flex-wrap items-center gap-2">
+          {(['All', 'OPEN', 'FULL', 'CLOSED'] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={pill(statusFilter === s)}
+            >
+              {s === 'All' ? 'All statuses' : STATUS_LABELS[s]}
+            </button>
+          ))}
+
+          <button
+            onClick={() => setCriticalOnly((v) => !v)}
+            className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+              criticalOnly
+                ? 'bg-red-500 text-white shadow-sm'
+                : 'bg-surface-subtle dark:bg-dark-elevated text-text-subtle dark:text-dark-muted hover:bg-surface-border dark:hover:bg-dark-border'
+            }`}
+            aria-pressed={criticalOnly}
+          >
+            🚨 Critical needs only
+          </button>
+
+          <input
+            type="search"
+            placeholder="Search needs…"
+            value={needsSearch}
+            onChange={(e) => setNeedsSearch(e.target.value)}
+            className="ml-auto px-3 py-1 text-xs rounded-full
+              border border-surface-border dark:border-dark-border
+              bg-surface-DEFAULT dark:bg-dark-elevated
+              text-text-DEFAULT dark:text-dark-text
+              placeholder:text-text-faint dark:placeholder:text-dark-subtle
+              focus:outline-none focus:ring-2 focus:ring-brand-500
+              w-36 sm:w-48"
+            aria-label="Search by need item"
+          />
+        </div>
+      </div>
+
       {/* Summary bar */}
       <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
         <p className="text-sm text-text-subtle dark:text-dark-muted">
-          <span className="font-semibold text-text-DEFAULT dark:text-dark-text">{shelters.length}</span> shelters ·{' '}
+          <span className="font-semibold text-text-DEFAULT dark:text-dark-text">{filtered.length}</span>
+          {filtered.length !== shelters.length && (
+            <span className="text-text-faint dark:text-dark-subtle"> of {shelters.length}</span>
+          )}{' '}
+          shelters ·{' '}
           <span className="font-semibold text-green-700 dark:text-green-400">{openCount} open</span>
         </p>
         <div className="flex items-center gap-1.5 text-xs text-text-faint dark:text-dark-subtle">
@@ -153,15 +246,21 @@ export function ShelterList({ initialShelters }: { initialShelters: ShelterRecor
       </div>
 
       {/* Shelter grid */}
-      {shelters.length === 0 ? (
+      {filtered.length === 0 ? (
         <div className="text-center py-16 text-text-faint dark:text-dark-subtle">
-          <p className="text-4xl mb-3" aria-hidden="true">🏠</p>
-          <p className="text-base">No shelters available right now.</p>
+          <p className="text-4xl mb-3" aria-hidden="true">🔍</p>
+          <p className="text-base">No shelters match your filters.</p>
+          <button
+            onClick={() => { setStateFilter('All'); setStatusFilter('All'); setCriticalOnly(false); setNeedsSearch(''); }}
+            className="mt-3 text-sm text-brand-500 hover:underline focus:outline-none focus:ring-2 focus:ring-brand-500 rounded"
+          >
+            Clear filters
+          </button>
         </div>
       ) : (
         <div role="region" aria-label="Shelter cards" aria-live="polite" aria-atomic="false">
           <ul className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 list-none p-0">
-            {shelters.map((shelter) => (
+            {filtered.map((shelter) => (
               <li key={shelter.shelterId} className="card-enter">
                 <ShelterCard shelter={shelter} />
               </li>

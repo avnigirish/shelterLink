@@ -1,9 +1,14 @@
 'use client';
 
 import { useState } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { useTheme } from './ThemeProvider';
-import { InfoPanel } from './InfoPanel';
+import dynamic from 'next/dynamic';
+
+const InfoPanel = dynamic(() => import('./InfoPanel').then((m) => m.InfoPanel), {
+  ssr: false,
+});
 
 export function Header() {
   const { theme, toggle } = useTheme();

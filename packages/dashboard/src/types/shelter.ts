@@ -25,6 +25,7 @@ export interface ShelterRecord {
   name: string;
   address: string;
   phone: string;
+  state: string;           // e.g. "NJ", "NY", "VA"
   beds: number;
   capacity: number;
   status: ShelterStatus;
