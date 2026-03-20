@@ -9,6 +9,8 @@
 
 ShelterLink lets non-technical shelter staff submit capacity updates via a web form or SMS simulator. Those updates appear instantly on a public-facing dashboard that any volunteer or donor can access — no account, no app, no friction. Community members can chat in real time per shelter, and donors can pledge supplies and track delivery.
 
+![ShelterLink dashboard — real-time shelter capacity, needs, and community coordination](docs/screenshot-dashboard.png)
+
 **The critical path:**
 
 ```
@@ -154,7 +156,7 @@ When the Advocate agent processes a donation pledge, it automatically posts a no
 | AI Community Advocate | Bedrock-powered agentic assistant — matches donors to shelters, executes pledges and chat alerts via tools |
 | Community Activity Feed | Pledge notifications auto-posted to shelter chat by the Advocate agent |
 | Admin Panel | GitHub OAuth-gated registry management, inventory editing, and donation oversight |
-| SMS Broadcast Alerts | Outbound SMS notifications via Pinpoint when shelters go FULL/CLOSED or gain CRITICAL needs — volunteers and donors subscribe per-shelter; STOP/START keyword opt-out/in supported *(implementation in progress — see `.kiro/specs/sms-broadcast-alerts/tasks.md`)* |
+| SMS Broadcast Alerts | Outbound SMS notifications via Pinpoint when shelters go FULL/CLOSED or gain CRITICAL needs — volunteers and donors subscribe per-shelter via the shelter detail page; STOP/START keyword opt-out/in supported via inbound SMS |
 
 ---
 
@@ -391,11 +393,19 @@ The pivot took less than a day because the spec documents absorbed the change cl
 
 ## Known Constraints & Design Decisions
 
-### Pinpoint SMS (temporarily disabled)
-AWS Pinpoint requires a subscription approval on new accounts (`SubscriptionRequiredException`). The Pinpoint resources in the CDK stack are commented out with a `TODO` marker. To re-enable:
+### Pinpoint SMS (pending sandbox approval)
+AWS Pinpoint requires a subscription approval on new accounts (`SubscriptionRequiredException`). The Pinpoint resources in the CDK stack are uncommented and ready — only the AWS-side sandbox approval is pending. To re-enable:
 1. Go to AWS Console → Amazon Pinpoint → request SMS sandbox access
-2. Uncomment the Pinpoint block in `packages/infra/lib/shelter-link-stack.ts`
-3. Redeploy with `npx cdk deploy`
+2. Redeploy with `npx cdk deploy` (the CDK block is already uncommented)
+
+**What the full end-to-end flow looks like once approved:**
+1. A volunteer visits any shelter detail page and enters their phone number in the "Get SMS alerts" form
+2. They receive a confirmation SMS: *"You're subscribed to ShelterLink alerts for Helping Hands of Springfield. Reply STOP to unsubscribe."*
+3. A shelter manager texts `BEDS 40/40 STATUS full` to the Pinpoint number
+4. Within ~3 seconds: the Lambda processes the update, DynamoDB Streams fires the Stream Handler, `evaluateTriggers()` detects the FULL transition, and an SMS fans out to all active subscribers: *"ShelterLink Alert: Helping Hands of Springfield is now FULL (40/40 beds). Reply STOP to unsubscribe."*
+5. The volunteer texts back `STOP` — their subscription record is set to `UNSUBSCRIBED` and they receive a confirmation
+
+The entire broadcast path — `evaluateTriggers`, `formatAlertMessage`, `broadcastAlerts`, STOP/START handling, the subscribe/unsubscribe API routes, and the `AlertSubscribeForm` component — is fully implemented and tested (155 passing tests across lambda and dashboard packages). The only blocker is the AWS account-level Pinpoint sandbox approval.
 
 ### Lambda Function URL (current ingestion)
 The Lambda Function URL is the active ingestion endpoint. It accepts `POST { phone, body }` and returns `{ ok, confirmation }` or `{ ok, error }`. CORS is configured to restrict allowed origins.

@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Post-Task Test Runner",
+  "description": "After each spec task completes, automatically runs the relevant test suite (lambda or dashboard) based on which files were touched, then reports pass/fail and coverage delta in chat. Keeps the spec → implement → verify loop tight without manual test runs.",
+  "version": "1.0.0",
+  "when": {
+    "type": "postTaskExecution"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A spec task just completed. Run the appropriate test suite and report results.\n\n## Steps\n\n1. Check which packages were modified in this task by scanning recent file changes:\n   - If any files under `packages/lambda/src/` were touched → run lambda tests\n   - If any files under `packages/dashboard/src/` were touched → run dashboard tests\n   - If both were touched → run both\n   - If neither (e.g. CDK-only task) → skip tests and report: \"No application code changed — skipping test run.\"\n\n2. Run the relevant test suite(s):\n   - Lambda: `npm run test --workspace=packages/lambda`\n   - Dashboard: `npm run test --workspace=packages/dashboard`\n   - Always use `--run` (single pass, not watch mode)\n\n3. Parse the test output and report in this format:\n\n**Post-Task Test Run**\n\n| Suite | Tests | Passed | Failed | Duration |\n|---|---|---|---|---|\n| lambda | N | N | N | Xs |\n| dashboard | N | N | N | Xs |\n\n**Status:** ✅ All tests passing / ❌ N test(s) failing\n\n4. If any tests failed:\n   - List each failing test name and the error message (first 3 lines only)\n   - Do NOT automatically fix the failures — report them and let the developer decide\n   - End with: \"Task marked complete but tests are failing — review before proceeding to the next task.\"\n\n5. If all tests passed:\n   - End with: \"✅ Test suite green — safe to proceed to the next task.\"\n\n## Rules\n- Never run `npm run dev` or any long-running process\n- Never modify source files — only run tests and report\n- If the test command fails to execute (e.g. missing deps), report the error and suggest `npm install`\n- Keep output concise — judges and developers need signal, not noise"
+  }
+}
