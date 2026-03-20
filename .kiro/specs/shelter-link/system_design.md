@@ -1,117 +1,169 @@
-# System Design — ShelterLink
+# System Design — ShelterLink (Pivoted Architecture)
 
 ## Architecture Overview
 
-ShelterLink uses a fully serverless, event-driven architecture on AWS. There is no server to manage or scale manually. The critical path is:
+ShelterLink uses a fully serverless, event-driven architecture on AWS. The original Pinpoint SMS gateway has been replaced with a **Lambda Function URL** as a public webhook endpoint, enabling direct HTTP-based status updates from a web form or SMS simulator. AWS AppSync provides real-time GraphQL subscriptions for the Community Chat feature.
 
 ```
-Shelter Manager (SMS)
-  → AWS Pinpoint (SMS_Gateway)
-  → AWS Lambda (Update_Processor)
-  → AWS DynamoDB (Data_Store)
-  → Next.js on Vercel / AWS Amplify (Dashboard)
-  → Volunteer / Donor (Browser)
+Web Form / SMS Simulator
+  → Lambda Function URL (Update_Processor)
+  → AWS DynamoDB (Shelters table)
+  → Next.js Dashboard (SSE + AppSync subscriptions)
+  → Volunteer / Donor / Community Member (Browser)
+
+Community Member (Browser)
+  → AWS AppSync (GraphQL Mutation)
+  → DynamoDB (CommunityChat table)
+  → AppSync Subscription → All connected clients (real-time)
+
+Admin (Browser)
+  → Next.js Admin Panel (GitHub OAuth)
+  → Lambda / DynamoDB (Inventory + Donations updates)
 ```
 
 ---
 
 ## Component Design
 
-### 1. SMS_Gateway — AWS Pinpoint
+### 1. Ingestion Endpoint — Lambda Function URL
 
-- Receives inbound SMS on a dedicated long code or toll-free number
-- Triggers the Update_Processor Lambda via SNS topic subscription
-- Sends outbound confirmation and error reply SMS via Pinpoint API called from Lambda
-- Phone number registration is stored in DynamoDB; no Pinpoint-side allow-listing required
+- Replaces AWS Pinpoint as the SMS/update ingestion point
+- Public HTTPS endpoint — no API Gateway required
+- Accepts JSON POST body: `{ phone, body }` where `body` is the SMS-format string
+- Validates sender phone against the shelter registry in DynamoDB
+- Parses the update body using the existing `Parser` module
+- Writes `RECORD#CURRENT` and `LOG#<timestamp>` to the Shelters table
+- Returns JSON confirmation or error response
+- Rate limiting enforced via DynamoDB (`RATELIMIT#<hashedPhone>`)
+- Environment variables: `SHELTER_TABLE`, `LOG_LEVEL`
+
+> **Pinpoint note:** Pinpoint resources remain commented out in the CDK stack pending SMS sandbox approval. The Lambda Function URL provides equivalent ingest capability for demo and hackathon purposes.
 
 ### 2. Update_Processor — AWS Lambda (TypeScript)
 
 - Runtime: Node.js 20.x, TypeScript compiled via esbuild
-- Triggered by SNS message from Pinpoint inbound SMS event
+- Triggered by Lambda Function URL (HTTP POST) **and** SQS (for future Pinpoint re-enable)
 - Responsibilities:
   - Validate sender phone number against the shelter registry
-  - Parse SMS body using the Parser module
-  - Write or update the Capacity_Record and Needs_List in DynamoDB
-  - Publish a change event to an API Gateway WebSocket connection table or EventBridge
-  - Call Pinpoint to send confirmation or error reply SMS via Pretty_Printer
-- Environment variables: `SHELTER_TABLE`, `PINPOINT_APP_ID`, `ORIGINATION_NUMBER`
-- IAM role: least-privilege, scoped to specific DynamoDB table and Pinpoint app
+  - Parse update body using the `Parser` module
+  - Write or update the `Capacity_Record` and `Needs_List` in DynamoDB
+  - Write audit log entry with masked phone
+  - Return structured JSON response (confirmation or error)
+- IAM role: least-privilege, scoped to specific DynamoDB table ARN
 
-### 3. Data_Store — AWS DynamoDB
+### 3. Community Chat — AWS AppSync (GraphQL)
 
-- Single-table design
-- Partition key: `PK` (e.g., `SHELTER#<shelterId>`)
-- Sort key: `SK` (e.g., `RECORD#CURRENT` for live state, `LOG#<timestamp>` for audit trail)
-- Key attributes per shelter record:
-  - `shelterId`, `name`, `address`, `phone`, `beds`, `occupancy`, `status`, `needsList`, `updatedAt`
+- GraphQL API with DynamoDB data source (`CommunityChat` table)
+- Mutations: `sendMessage(roomId, senderName, message, userType)`
+- Queries: `getMessages(roomId, limit)`
+- Subscriptions: `onNewMessage(roomId)` — real-time push to all connected clients
+- Auth: API key for public read; Cognito or IAM for write (configurable)
+- Dashboard integrates AppSync JS client for subscription-based chat UI
+
+### 4. Data_Store — AWS DynamoDB (Multi-Table)
+
+Three tables (see `schema.md` for full attribute definitions):
+
+| Table | PK | SK | Purpose |
+|---|---|---|---|
+| `shelterlink-shelters` | `SHELTER#<id>` | `RECORD#CURRENT` / `LOG#<ts>` | Shelter capacity, inventory, needs |
+| `shelterlink-chat` | `ROOM#<roomId>` | `MSG#<timestamp>` | Community chat messages |
+| `shelterlink-donations` | `USER#<userId>` | `DONATION#<donationId>` | User donation pledges |
+
+- DynamoDB Streams enabled on `shelterlink-shelters` for SSE push to dashboard
 - TTL on log entries: 90 days
-- DynamoDB Streams enabled to trigger real-time push to connected Dashboard clients
+- TTL on chat messages: 30 days
 
-### 4. Dashboard — Next.js (TypeScript)
+### 5. Dashboard — Next.js 14 (TypeScript)
 
-- Hosted on Vercel or AWS Amplify
 - Pages:
-  - `/` — public shelter map and capacity list (SSR + client hydration)
-  - `/shelter/[id]` — individual shelter detail with Needs_List
-  - `/admin` — protected shelter registry management (NextAuth.js session required)
-- Real-time updates via API Route that proxies DynamoDB Stream events as Server-Sent Events (SSE)
-- Server-rendered fallback ensures content is accessible without JavaScript
-- Styling: Tailwind CSS with WCAG 2.1 AA compliant color tokens
+  - `/` — public shelter list (SSR + SSE real-time updates)
+  - `/shelter/[id]` — shelter detail with Needs_List, Inventory, and Community Chat
+  - `/admin` — protected registry + inventory management (NextAuth.js session required)
+  - `/donate/[shelterId]` — donation pledge form (public)
+- Real-time shelter updates via SSE (`/api/updates`)
+- Real-time chat via AppSync GraphQL subscription
+- `USE_MOCK_DATA=true` bypasses all AWS calls for local development
 
 ---
 
 ## Data Flow
 
-### Inbound SMS Update
+### Web Form / SMS Simulator Update
 
-1. Shelter_Manager sends SMS: `BEDS 12/20 NEEDS blankets:high, water:critical`
-2. Pinpoint receives SMS, publishes to SNS topic `shelterlink-inbound`
-3. Lambda `Update_Processor` is invoked with SNS event payload
-4. Lambda validates sender phone → looks up shelter in DynamoDB
-5. Parser extracts `beds=12`, `capacity=20`, `needs=[{item:'blankets',priority:'HIGH'},{item:'water',priority:'CRITICAL'}]`
-6. Lambda writes updated Capacity_Record to DynamoDB (`PK=SHELTER#abc`, `SK=RECORD#CURRENT`)
-7. Lambda writes audit log entry (`SK=LOG#<timestamp>`)
-8. DynamoDB Stream triggers SSE push Lambda → connected Dashboard clients receive update
-9. Pretty_Printer formats confirmation: `Updated: 12/20 beds. Needs: blankets (HIGH), water (CRITICAL).`
-10. Lambda calls Pinpoint to send confirmation SMS to Shelter_Manager
+1. Operator submits form: `{ phone: "+15551234567", body: "BEDS 12/20 NEEDS blankets:high" }`
+2. POST to Lambda Function URL
+3. Lambda validates phone → looks up shelter in DynamoDB
+4. Parser extracts `beds=12`, `capacity=20`, `needs=[{item:'blankets',priority:'HIGH'}]`
+5. Lambda writes `RECORD#CURRENT` and `LOG#<timestamp>` to `shelterlink-shelters`
+6. DynamoDB Stream triggers SSE push → connected Dashboard clients receive update
+7. Lambda returns `{ ok: true, confirmation: "Updated: 12/20 beds. Needs: blankets (HIGH)." }`
+
+### Community Chat Message
+
+1. Community member types message in Dashboard chat panel
+2. AppSync mutation `sendMessage` fires
+3. AppSync writes to `shelterlink-chat` (`PK=ROOM#<shelterId>`, `SK=MSG#<timestamp>`)
+4. AppSync subscription `onNewMessage` pushes to all connected clients in that room
+5. Dashboard chat panel updates in real time
+
+### Donation Pledge
+
+1. Donor visits `/donate/<shelterId>` and submits pledge form
+2. POST to `/api/donations` — writes to `shelterlink-donations` table
+3. Admin panel shows pending pledges; admin marks as Delivered
 
 ### Dashboard Load
 
 1. Browser requests `/` — Next.js SSR fetches all shelters from DynamoDB and renders HTML
 2. Client hydrates and opens SSE connection to `/api/updates`
 3. On DynamoDB Stream event, SSE endpoint pushes JSON patch to all connected clients
-4. React state updates, Dashboard re-renders affected shelter cards without full reload
+4. React state updates, shelter cards re-render without full reload
 
 ---
 
 ## Scalability
 
-- Lambda scales to zero when idle; no cost during off-hours
-- DynamoDB on-demand billing handles traffic spikes (disaster events) without pre-provisioning
-- SSE connections are stateless per Lambda invocation; connection state managed via DynamoDB connection table
-- Pinpoint SMS throughput: up to 20 TPS on long code; sufficient for community-scale shelter networks
+- Lambda Function URL scales automatically; no idle cost
+- DynamoDB on-demand billing handles traffic spikes without pre-provisioning
+- AppSync manages WebSocket connection state — no custom connection table needed for chat
+- SSE connections remain stateless per Lambda invocation
 
 ---
 
 ## Security
 
 ### Input Validation
-- All SMS body content is treated as untrusted input
-- Parser uses strict regex patterns; any unmatched content is rejected with an error reply
-- DynamoDB writes use typed attribute schemas; no raw string interpolation into queries
+- All POST body content treated as untrusted input
+- Parser uses strict regex; unmatched content rejected with error response
+- DynamoDB writes use typed attribute schemas
 
-### CSRF Protection
-- Admin routes protected by NextAuth.js CSRF token validation on all POST/PUT/DELETE requests
-- API routes validate `Origin` header against allowed domain list
+### CSRF & Origin Protection
+- Admin routes protected by NextAuth.js CSRF token validation
+- API routes validate `Origin` header against `NEXT_PUBLIC_ALLOWED_ORIGIN`
+- Lambda Function URL configured with CORS policy restricting allowed origins
 
 ### Authorization
-- Shelter registry updates require an authenticated admin session (NextAuth.js + AWS Cognito or GitHub OAuth)
-- Lambda execution role uses least-privilege IAM policy — no `*` resource ARNs
-- DynamoDB table has resource-based policy restricting access to the Lambda execution role ARN
+- Shelter registry updates require authenticated admin session (GitHub OAuth)
+- Lambda execution role uses least-privilege IAM — no `*` resource ARNs
+- AppSync API key scoped to read-only; mutations require authenticated identity
 
 ### Data Privacy
 - Phone numbers stored in DynamoDB are hashed (SHA-256 + salt) in audit log entries
 - Live registry stores E.164 format numbers; access restricted to Lambda role only
+- Phone numbers never appear in plaintext in CloudWatch logs (`maskPhone()`)
+
+---
+
+## Region Configuration
+
+All AWS SDK clients **must** initialize with an explicit region:
+
+```typescript
+new DynamoDBClient({ region: process.env['AWS_REGION'] ?? 'us-east-1' })
+```
+
+This prevents silent region fallback to an incorrect default when `AWS_REGION` is not set in the Lambda execution environment.
 
 ---
 
@@ -121,7 +173,7 @@ Shelter Manager (SMS)
 |---|---|
 | Operational Excellence | CloudWatch alarms on Lambda errors and DynamoDB throttles; structured JSON logging |
 | Security | Least-privilege IAM, input validation, CSRF protection, phone number masking in logs |
-| Reliability | DynamoDB on-demand, Lambda retries on SNS, SSR fallback for Dashboard |
-| Performance Efficiency | Single-table DynamoDB design, SSE over polling, esbuild Lambda bundles |
-| Cost Optimization | Serverless pay-per-use, DynamoDB TTL on logs, no idle EC2 |
-| Sustainability | No always-on compute; Lambda cold starts acceptable for SMS latency budget |
+| Reliability | DynamoDB on-demand, Lambda retries on SQS, SSR fallback for Dashboard |
+| Performance Efficiency | Single-table DynamoDB design, SSE over polling, AppSync subscriptions for chat |
+| Cost Optimization | Serverless pay-per-use, DynamoDB TTL on logs and chat, no idle EC2 |
+| Sustainability | No always-on compute; Lambda cold starts acceptable for update latency budget |

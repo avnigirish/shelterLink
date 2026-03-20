@@ -1,24 +1,41 @@
 # ShelterLink
 
-> Real-time shelter capacity tracking via SMS — built for the AWS Reachback Hackathon.
+> Real-time shelter capacity tracking and community coordination — built for the AWS Reachback Hackathon.
 > Theme: *Build for Impact — Code That Matters to Your Community*
 
 ---
 
 ## What It Does
 
-ShelterLink lets non-technical shelter staff send a plain SMS to update their shelter's bed availability and supply needs. Those updates appear instantly on a public-facing dashboard that any volunteer or donor can access — no account, no app, no friction.
+ShelterLink lets non-technical shelter staff submit capacity updates via a web form or SMS simulator. Those updates appear instantly on a public-facing dashboard that any volunteer or donor can access — no account, no app, no friction. Community members can chat in real time per shelter, and donors can pledge supplies and track delivery.
 
 **The critical path:**
 
 ```
-Shelter Manager (SMS)
-  → AWS Pinpoint
-  → AWS Lambda (Update_Processor)
-  → AWS DynamoDB
+Web Form / SMS Simulator
+  → Lambda Function URL (Update_Processor)
+  → AWS DynamoDB (Shelters table)
   → Next.js Dashboard (SSE)
   → Volunteer / Donor (Browser)
+
+Community Member
+  → AWS AppSync (GraphQL Mutation)
+  → DynamoDB (Chat table)
+  → AppSync Subscription → All connected clients
 ```
+
+> **Pinpoint note:** AWS Pinpoint SMS requires sandbox approval on new accounts. Pinpoint resources are commented out in the CDK stack with `TODO` markers. The Lambda Function URL provides equivalent ingest capability for demo purposes. To re-enable: request SMS sandbox access in the AWS Console, then uncomment the Pinpoint block in `packages/infra/lib/shelter-link-stack.ts`.
+
+---
+
+## New Features (Pivot)
+
+| Feature | Description |
+|---|---|
+| Lambda Function URL | Public HTTPS endpoint replaces Pinpoint for update ingestion |
+| Community Chat | Real-time per-shelter chat via AWS AppSync GraphQL subscriptions |
+| Inventory Management | Shelter staff track current supply quantities via admin panel |
+| Donation Tracking | Donors pledge supplies; admins mark pledges as delivered |
 
 ---
 
@@ -28,27 +45,35 @@ Shelter Manager (SMS)
 shelterlink/
 ├── packages/
 │   ├── lambda/          # Update_Processor — TypeScript, Node.js 20.x
-│   │   ├── src/
-│   │   │   ├── handler.ts
-│   │   │   ├── parser.ts
-│   │   │   ├── prettyPrinter.ts
-│   │   │   ├── registry.ts
-│   │   │   ├── rateLimit.ts
-│   │   │   └── types.ts
-│   │   └── vitest.config.ts
+│   │   └── src/
+│   │       ├── handler.ts          # Lambda Function URL + SQS handler
+│   │       ├── parser.ts           # SMS-format body parser
+│   │       ├── prettyPrinter.ts    # Confirmation message formatter
+│   │       ├── registry.ts         # Phone → shelter lookup + maskPhone()
+│   │       ├── rateLimit.ts        # Unauthorized attempt suppression
+│   │       ├── streamHandler.ts    # DynamoDB Streams → SSE push
+│   │       └── types.ts            # Shared Lambda types
 │   ├── dashboard/       # Next.js 14 App Router, Tailwind CSS
-│   │   ├── src/
-│   │   │   ├── app/
-│   │   │   │   ├── layout.tsx
-│   │   │   │   ├── page.tsx              # SSR home — shelter list
-│   │   │   │   └── shelter/[id]/page.tsx # SSR detail — needs list
-│   │   │   ├── lib/
-│   │   │   │   ├── db.ts                 # DynamoDB data-access layer
-│   │   │   │   └── mockData.ts           # Real shelter data for local dev
-│   │   │   └── types/
-│   │   │       └── shelter.ts            # Shared TypeScript types
-│   │   └── tailwind.config.ts            # WCAG 2.1 AA color tokens
-│   └── infra/           # AWS CDK stack (TypeScript)
+│   │   └── src/
+│   │       ├── app/
+│   │       │   ├── page.tsx                    # SSR home — shelter list
+│   │       │   ├── shelter/[id]/page.tsx        # SSR detail — needs, inventory, chat
+│   │       │   ├── donate/[shelterId]/page.tsx  # Donation pledge form
+│   │       │   ├── login/page.tsx               # GitHub OAuth login
+│   │       │   └── admin/page.tsx               # Admin — registry + inventory
+│   │       ├── components/
+│   │       │   ├── ShelterList.tsx
+│   │       │   ├── NeedsFilter.tsx
+│   │       │   ├── CommunityChat.tsx            # AppSync subscription chat
+│   │       │   ├── InventoryPanel.tsx           # Inventory display + admin edit
+│   │       │   ├── DonationForm.tsx             # Pledge form
+│   │       │   └── AddShelterForm.tsx
+│   │       └── lib/
+│   │           ├── db.ts           # DynamoDB data-access
+│   │           ├── auth.ts         # NextAuth config
+│   │           ├── registry.ts     # Shelter registry CRUD
+│   │           └── mockData.ts     # Local dev mock data (Springfield, IL)
+│   └── infra/           # AWS CDK v2 stack
 │       └── lib/
 │           └── shelter-link-stack.ts
 ├── .kiro/
@@ -56,6 +81,7 @@ shelterlink/
 │       └── shelter-link/
 │           ├── requirements.md
 │           ├── system_design.md
+│           ├── schema.md           # DynamoDB table schemas
 │           └── tasks.md
 └── README.md
 ```
@@ -87,20 +113,52 @@ USE_MOCK_DATA=true
 
 ### Deploy to AWS
 
-> **Note:** AWS Pinpoint requires a separate subscription approval before the full stack can deploy. See [Known Constraints](#known-constraints--design-decisions) below.
-
 ```bash
 # First-time bootstrap
 cd packages/infra && npx cdk bootstrap
 
-# Deploy (Pinpoint is commented out until subscription is approved)
+# Deploy
 npx cdk deploy
 
 # Once deployed, switch dashboard to real data
 # packages/dashboard/.env.local
 SHELTER_TABLE=shelterlink-data
 AWS_REGION=us-east-1
+APPSYNC_ENDPOINT=https://<id>.appsync-api.us-east-1.amazonaws.com/graphql
+APPSYNC_API_KEY=<key>
 ```
+
+---
+
+## Environment Variables
+
+Create `packages/dashboard/.env.local` before running locally:
+
+```bash
+# Local dev (mock data — no AWS needed)
+AWS_REGION=us-east-1
+USE_MOCK_DATA=true
+
+# Production (real DynamoDB + AppSync)
+AWS_REGION=us-east-1
+SHELTER_TABLE=shelterlink-shelters
+CHAT_TABLE=shelterlink-chat
+DONATIONS_TABLE=shelterlink-donations
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+APPSYNC_ENDPOINT=
+APPSYNC_API_KEY=
+
+# Admin auth
+NEXT_PUBLIC_ALLOWED_ORIGIN=https://your-domain.com
+NEXTAUTH_SECRET=          # openssl rand -base64 32
+NEXTAUTH_URL=https://your-domain.com
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+ALLOWED_EMAILS=           # comma-separated allowed GitHub emails
+```
+
+Lambda environment variables are set automatically by the CDK stack.
 
 ---
 
@@ -133,19 +191,20 @@ exports.handler = async (event) => {
 };
 ```
 
-After adding explicit rules — TypeScript only, AWS SDK v3, structured logging via Powertools, no TODOs — the same request produced:
+After adding explicit rules — TypeScript only, AWS SDK v3, structured logging via Powertools, explicit region, no TODOs — the same request produced:
 
 ```typescript
 // After steering
 import { Logger } from '@aws-lambda-powertools/logger';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
-import type { SNSEvent } from 'aws-lambda';
+import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 
 const logger = new Logger({ serviceName: 'update-processor' });
-const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const ddb = DynamoDBDocumentClient.from(
+  new DynamoDBClient({ region: process.env['AWS_REGION'] ?? 'us-east-1' })
+);
 
-export const handler = async (event: SNSEvent): Promise<void> => {
+export const handler = async (event: unknown): Promise<void> => {
   // implementation follows...
 };
 ```
@@ -160,25 +219,35 @@ The workflow I landed on has three phases that feed each other:
 
 **1. Requirements first, code second**
 
-Writing `requirements.md` before touching a keyboard forced me to answer questions I would have deferred: What does "real-time" actually mean? (Within 5 seconds of SMS receipt.) What happens when an unauthorized number texts in? (Reply once, then suppress after 5 attempts.) What's the SMS format? (Case-insensitive, whitespace-tolerant.)
+Writing `requirements.md` before touching a keyboard forced me to answer questions I would have deferred: What does "real-time" actually mean? (Within 5 seconds of update receipt.) What happens when an unauthorized number submits? (Suppress after 5 attempts.) What's the update format? (Case-insensitive, whitespace-tolerant.)
 
 These aren't implementation details — they're correctness properties. And once they're written down, Kiro can check against them.
 
 **2. Design as a contract**
 
-`system_design.md` isn't documentation I wrote after the fact. It's a contract I wrote *before* asking Kiro to generate anything. When the design says "single-table DynamoDB with `PK`/`SK` composite keys," every generated schema respects that. When it says "SSE over polling," no generated component opens a `setInterval`.
-
-The design doc also forced me to think about the seams between components — specifically, the Parser/Pretty_Printer round-trip. That invariant (parse → format → parse = same record) became a property-based test, which became a real correctness guarantee.
+`system_design.md` isn't documentation I wrote after the fact. It's a contract I wrote *before* asking Kiro to generate anything. When the design says "multi-table DynamoDB with `PK`/`SK` composite keys," every generated schema respects that. When it says "SSE over polling," no generated component opens a `setInterval`. When it says "AppSync for chat," no component opens a WebSocket manually.
 
 **3. Steering as a style guide**
 
 The steering rules I found most valuable weren't the obvious ones ("use TypeScript"). They were the ones that encoded *why*:
 
+- "Always include `region: process.env['AWS_REGION'] ?? 'us-east-1'` in SDK clients" — because silent region fallback caused real deployment failures.
 - "No `console.log` in Lambda handlers — use structured logging with `@aws-lambda-powertools/logger`" — because CloudWatch log insights requires structured JSON to be queryable.
 - "Phone numbers must never appear in plaintext in CloudWatch logs" — because audit logs are often accessible to more people than the application itself.
-- "Use `aria-live=\"polite\"` for real-time update regions" — because screen reader users need to know when shelter data changes without losing their place on the page.
 
 When the *why* is in the steering doc, Kiro doesn't just follow the rule — it applies the same reasoning to adjacent decisions I didn't explicitly cover.
+
+---
+
+### Pivoting Under Pressure
+
+Mid-project, AWS Pinpoint hit a `SubscriptionRequiredException` wall — new accounts require manual sandbox approval with a multi-day lead time. Rather than block on that, the architecture pivoted:
+
+- **Pinpoint → Lambda Function URL**: A public HTTPS endpoint that accepts the same SMS-format body as a JSON POST. The parser, registry, and rate-limit logic are unchanged. The only difference is the event envelope.
+- **Added AppSync**: Community Chat needed real-time bidirectional messaging — SSE is one-way. AppSync GraphQL subscriptions handle this cleanly without a custom WebSocket server.
+- **Added Inventory + Donations**: The DynamoDB schema expanded from single-table to three tables. The `inventory` field on the Shelter record uses a DynamoDB Map attribute — atomic `UpdateItem` operations keep it consistent.
+
+The pivot took less than a day because the spec documents absorbed the change cleanly. Requirements updated, design updated, tasks updated — the code followed the spec, not the other way around.
 
 ---
 
@@ -190,46 +259,10 @@ When the *why* is in the steering doc, Kiro doesn't just follow the rule — it 
 | `console.log` debugging | `@aws-lambda-powertools/logger` structured logs |
 | Hardcoded table names | Environment variable reads |
 | Polling-based dashboard updates | SSE via DynamoDB Streams |
+| No explicit region | `region: process.env['AWS_REGION'] ?? 'us-east-1'` everywhere |
 | Generic color palette | WCAG 2.1 AA contrast-checked Tailwind tokens |
 | No test coverage | Vitest unit tests + property-based round-trip tests |
 | `any` types throughout | Explicit types with `unknown` + type guards |
-
-The steering doc didn't make Kiro smarter. It made the *context* smarter — and that's the same thing in practice.
-
----
-
-### Key Takeaway
-
-Spec-Driven Development with Kiro isn't about writing more documentation. It's about writing the *right* documentation *first*, so that every code generation request starts from a shared understanding of what correct looks like.
-
-The three artifacts — `requirements.md`, `system_design.md`, `steering.md` — aren't overhead. They're the difference between a prototype that demos well and a system you'd actually hand to a shelter manager at 2am during a crisis.
-
----
-
-## Environment Variables
-
-Create `packages/dashboard/.env.local` before running locally:
-
-```bash
-# Local dev (mock data — no AWS needed)
-AWS_REGION=us-east-1
-USE_MOCK_DATA=true
-
-# Production (real DynamoDB)
-AWS_REGION=us-east-1
-SHELTER_TABLE=shelterlink-data
-AWS_ACCESS_KEY_ID=
-AWS_SECRET_ACCESS_KEY=
-
-# Admin auth (Phase 6)
-NEXT_PUBLIC_ALLOWED_ORIGIN=https://your-domain.com
-NEXTAUTH_SECRET=          # openssl rand -base64 32
-NEXTAUTH_URL=https://your-domain.com
-GITHUB_CLIENT_ID=
-GITHUB_CLIENT_SECRET=
-```
-
-Lambda environment variables are set automatically by the CDK stack via `environment:` on the function definition.
 
 ---
 
@@ -241,20 +274,20 @@ AWS Pinpoint requires a subscription approval on new accounts (`SubscriptionRequ
 2. Uncomment the Pinpoint block in `packages/infra/lib/shelter-link-stack.ts`
 3. Redeploy with `npx cdk deploy`
 
+### Lambda Function URL (current ingestion)
+The Lambda Function URL is the active ingestion endpoint. It accepts `POST { phone, body }` and returns `{ ok, confirmation }` or `{ ok, error }`. CORS is configured to restrict allowed origins.
+
 ### Auth Provider
-Admin routes use **GitHub OAuth via NextAuth.js** (not AWS Cognito). Cognito adds CDK complexity that isn't justified for hackathon scope. Swap to Cognito post-launch if multi-org admin access is needed.
+Admin routes use **GitHub OAuth via NextAuth.js** (not AWS Cognito). Cognito adds CDK complexity that isn't justified for hackathon scope.
+
+### AppSync for Chat
+AppSync manages WebSocket connection state for Community Chat — no custom connection table needed. The DynamoDB `shelterlink-chat` table is the AppSync data source.
 
 ### SSE Reconnection
-SSE connections are stateless per Lambda invocation. The client dashboard implements exponential backoff reconnection (max 30s interval). Connection state is tracked in a DynamoDB `CONNECTIONS` table (`PK=CONN#<connectionId>`, TTL=300s).
+SSE connections are stateless per Lambda invocation. The client dashboard implements exponential backoff reconnection (max 30s interval).
 
-### SMS Throughput & Rate Limiting
-Lambda reserved concurrency is set to 10 for the Update_Processor to prevent DynamoDB write throttling during traffic spikes. An SQS queue with a Dead Letter Queue (DLQ) sits between SNS and Lambda — failed SMS processing is captured rather than silently dropped.
-
-### Pinpoint Number Type
-Uses a **long code** number for development and demo. Toll-free numbers require carrier registration (2–3 week lead time). Switch to toll-free for production to improve deliverability.
-
-### Audit Hook Scope
-The React Quality & Accessibility audit hook fires on `.tsx` and `.jsx` files only. Lambda TypeScript handlers (`.ts`) are covered by the Vitest test suite and CDK synth checks instead.
+### Region Configuration
+All AWS SDK clients explicitly set `region: process.env['AWS_REGION'] ?? 'us-east-1'`. This prevents silent region fallback failures in Lambda and Next.js server components.
 
 ---
 
@@ -262,12 +295,15 @@ The React Quality & Accessibility audit hook fires on `.tsx` and `.jsx` files on
 
 | Service | Role |
 |---|---|
-| AWS Pinpoint | SMS gateway — inbound and outbound |
-| AWS Lambda | Update_Processor — parse, validate, write |
-| AWS DynamoDB | Data_Store — single-table, on-demand |
-| AWS SNS | Event bridge between Pinpoint and Lambda |
+| AWS Lambda (Function URL) | Update ingestion endpoint — replaces Pinpoint for demo |
+| AWS Lambda (SQS trigger) | Update_Processor — parse, validate, write |
+| AWS DynamoDB | Multi-table data store — shelters, chat, donations |
+| AWS AppSync | GraphQL API — real-time Community Chat subscriptions |
+| AWS SNS | Event bridge (retained for future Pinpoint re-enable) |
+| AWS SQS + DLQ | Reliable message delivery with failure capture |
 | AWS CDK | Infrastructure as code |
 | AWS CloudWatch | Structured logging and alarms |
+| AWS Pinpoint | SMS gateway — commented out pending sandbox approval |
 
 ---
 

@@ -8,7 +8,7 @@
 
 ### `packages/lambda` — Update_Processor
 - Runtime: AWS Lambda (Node.js 20.x)
-- AWS SDK v3: `@aws-sdk/client-dynamodb`, `@aws-sdk/lib-dynamodb`, `@aws-sdk/client-pinpoint`
+- AWS SDK v3: `@aws-sdk/client-dynamodb`, `@aws-sdk/lib-dynamodb`
 - Structured logging: `@aws-lambda-powertools/logger` — never use `console.log` in Lambda handlers
 - Bundler: esbuild (`esbuild.config.mjs`)
 - Tests: Vitest + `fast-check` for property-based testing
@@ -18,6 +18,7 @@
 - React 18, Tailwind CSS 3
 - Auth: NextAuth.js v4 with GitHub OAuth provider
 - AWS SDK v3 for DynamoDB access
+- AWS AppSync JS client (`aws-amplify` or `@aws-amplify/api`) for Community Chat subscriptions
 - Tests: Vitest + `@testing-library/react`
 
 ### `packages/infra` — CDK Infrastructure
@@ -27,10 +28,24 @@
 ## Key Conventions
 - AWS SDK v3 modular imports only — never `aws-sdk` v2
 - Environment variables accessed via `process.env['VAR_NAME']` (bracket notation) in Lambda
-- DynamoDB single-table design: `PK=SHELTER#<id>`, `SK=RECORD#CURRENT` or `SK=LOG#<timestamp>`
+- **ALL DynamoDB, AppSync, and Lambda SDK clients MUST include an explicit region:**
+  ```typescript
+  new DynamoDBClient({ region: process.env['AWS_REGION'] ?? 'us-east-1' })
+  ```
+  Never rely on implicit region resolution — it silently fails in Lambda and Next.js server components.
 - Module-level SDK clients for Lambda warm reuse — instantiate outside the handler function
-- SSE (Server-Sent Events) for real-time dashboard updates — no polling from the client
+- SSE (Server-Sent Events) for real-time shelter updates — no polling from the client
+- AppSync subscriptions for real-time Community Chat — no polling
 - `USE_MOCK_DATA=true` env var switches dashboard to local mock data (no AWS needed)
+- DynamoDB multi-table design:
+  - `shelterlink-shelters`: `PK=SHELTER#<id>`, `SK=RECORD#CURRENT` or `SK=LOG#<timestamp>`
+  - `shelterlink-chat`: `PK=ROOM#<shelterId>`, `SK=MSG#<timestamp>`
+  - `shelterlink-donations`: `PK=USER#<userId>`, `SK=DONATION#<donationId>`
+
+## Pinpoint Status
+- AWS Pinpoint SMS requires sandbox approval — resources are commented out in CDK with `TODO` markers
+- The Lambda Function URL replaces Pinpoint as the ingestion endpoint for demo and hackathon purposes
+- To re-enable Pinpoint: request SMS sandbox access in AWS Console, then uncomment the CDK block
 
 ## Common Commands
 
