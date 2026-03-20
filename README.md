@@ -110,12 +110,37 @@ This transparency is intentional — agentic systems that act silently erode tru
 
 ---
 
+## Community Activity Feed
+
+When the Advocate agent processes a donation pledge, it automatically posts a notification to the shelter's community chat — so everyone watching the feed sees generosity happen in real time, without any manual action.
+
+**How it works:**
+
+1. A user tells the Advocate they want to donate (e.g. "I have 10 blankets for shelter-001")
+2. The Advocate calls `PledgeTool` → pledge written to DynamoDB (or mock store)
+3. `PledgeTool` immediately calls `AlertTool` with a formatted message: `🤝 Alice has pledged to donate 10× blankets`
+4. `AlertTool` pushes a `ChatMessage` to `MOCK_MESSAGES` (mock mode) or DynamoDB `shelterlink-chat` (prod)
+5. The `CommunityChat` component picks it up on its next 3-second poll
+
+**Visual treatment:** Pledge notifications render with a teal background and teal text — no role badge — so they stand out from regular volunteer/donor messages at a glance.
+
+**Fallback behavior:** If the `AlertTool` call fails, the pledge still succeeds. The notification is non-fatal and wrapped in a `try/catch` inside `executePledgeTool`.
+
+**Mock community members:** `mockUsers.ts` holds 8 realistic community profiles (`VOLUNTEER`, `DONOR`, `STAFF`) linked to matching records in `mockDonations.ts`. Every `donationId` in a user's profile corresponds to a real `DonationRecord`, and every `DonationRecord.userId` maps back to a `MockUser` — referential integrity is verified by property-based tests.
+
+**Admin community view:** The `/admin` page includes a "Community Members" table showing each user's name, email, role badge, activity summary, and join date. Empty state renders "No community members yet" when the list is empty.
+
+---
+
 ## New Features (Pivot)
 
 | Feature | Description |
 |---|---|
 | Lambda Function URL | Public HTTPS endpoint replaces Pinpoint for update ingestion |
 | Community Chat | Real-time per-shelter chat via AWS AppSync GraphQL subscriptions |
+| Community Activity Feed | Pledge notifications auto-posted to chat by the Advocate agent |
+| Mock Community Members | 8 realistic user profiles with linked donation history |
+| Admin Community View | Member table with role badges, activity summaries, and donation links |
 | Inventory Management | Shelter staff track current supply quantities via admin panel |
 | Donation Tracking | Donors pledge supplies; admins mark pledges as delivered |
 | AI Community Advocate | Bedrock-powered assistant matches donors to shelters, summarizes chat, onboards new users |
@@ -207,8 +232,8 @@ npx cdk deploy
 # packages/dashboard/.env.local
 SHELTER_TABLE=shelterlink-data
 AWS_REGION=us-east-1
-APPSYNC_ENDPOINT=https://<id>.appsync-api.us-east-1.amazonaws.com/graphql
-APPSYNC_API_KEY=<key>
+NEXT_PUBLIC_APPSYNC_ENDPOINT=https://<id>.appsync-api.us-east-1.amazonaws.com/graphql
+NEXT_PUBLIC_APPSYNC_API_KEY=<key>
 ```
 
 ---
@@ -229,8 +254,8 @@ CHAT_TABLE=shelterlink-chat
 DONATIONS_TABLE=shelterlink-donations
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
-APPSYNC_ENDPOINT=
-APPSYNC_API_KEY=
+NEXT_PUBLIC_APPSYNC_ENDPOINT=
+NEXT_PUBLIC_APPSYNC_API_KEY=
 
 # Admin auth
 NEXT_PUBLIC_ALLOWED_ORIGIN=https://your-domain.com

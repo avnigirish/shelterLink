@@ -12,8 +12,12 @@ const USER_TYPE_COLORS: Record<UserType, string> = {
   VOLUNTEER: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
   DONOR:     'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
   STAFF:     'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
-  ADMIN:     'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+  ADMIN:     'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300',
 };
+
+function isAdvocateMessage(msg: ChatMessage): boolean {
+  return msg.userType === 'ADMIN' && msg.senderName === 'Community Advocate';
+}
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -110,18 +114,27 @@ export function CommunityChat({ shelterId, initialMessages }: Props) {
           </li>
         ) : (
           messages.map((msg) => (
-            <li key={`${msg.roomId}-${msg.timestamp}`} className="flex flex-col gap-0.5">
+            <li
+              key={`${msg.roomId}-${msg.timestamp}`}
+              className={`flex flex-col gap-0.5 ${isAdvocateMessage(msg) ? 'bg-teal-50 dark:bg-teal-900/10 -mx-4 px-4 py-1.5 rounded' : ''}`}
+            >
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-medium text-sm text-text-DEFAULT dark:text-dark-text">{msg.senderName}</span>
-                <span
-                  className={`text-xs px-1.5 py-0.5 rounded font-medium ${USER_TYPE_COLORS[msg.userType]}`}
-                  aria-label={`User type: ${msg.userType.toLowerCase()}`}
-                >
-                  {msg.userType}
+                <span className={`font-medium text-sm ${isAdvocateMessage(msg) ? 'text-teal-700 dark:text-teal-300' : 'text-text-DEFAULT dark:text-dark-text'}`}>
+                  {msg.senderName}
                 </span>
+                {!isAdvocateMessage(msg) && (
+                  <span
+                    className={`text-xs px-1.5 py-0.5 rounded font-medium ${USER_TYPE_COLORS[msg.userType]}`}
+                    aria-label={`User type: ${msg.userType.toLowerCase()}`}
+                  >
+                    {msg.userType}
+                  </span>
+                )}
                 <span className="text-xs text-text-subtle dark:text-dark-subtle">{relativeTime(msg.timestamp)}</span>
               </div>
-              <p className="text-sm text-text-muted dark:text-dark-muted">{msg.message}</p>
+              <p className={`text-sm ${isAdvocateMessage(msg) ? 'text-teal-800 dark:text-teal-200 font-medium' : 'text-text-muted dark:text-dark-muted'}`}>
+                {msg.message}
+              </p>
             </li>
           ))
         )}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, QueryCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 import type { ChatMessage, UserType } from '@/types/shelter';
+import { MOCK_MESSAGES } from '@/lib/mockChat';
 
 const TABLE = 'shelterlink-chat';
 const USE_MOCK = process.env.USE_MOCK_DATA === 'true';
@@ -15,23 +16,6 @@ function getClient() {
   return ddb;
 }
 
-// In-memory mock store for chat messages
-const MOCK_MESSAGES: ChatMessage[] = [
-  {
-    roomId: 'shelter-001',
-    timestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-    senderName: 'Jane V.',
-    message: 'Bringing blankets tomorrow morning!',
-    userType: 'VOLUNTEER',
-  },
-  {
-    roomId: 'shelter-001',
-    timestamp: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
-    senderName: 'Mark D.',
-    message: 'I can donate canned goods this weekend.',
-    userType: 'DONOR',
-  },
-];
 
 function isValidUserType(value: unknown): value is UserType {
   return value === 'VOLUNTEER' || value === 'DONOR' || value === 'STAFF';
