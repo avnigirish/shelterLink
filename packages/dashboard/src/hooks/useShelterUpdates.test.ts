@@ -30,7 +30,7 @@ class MockEventSource {
 
   /** Simulate an incoming message */
   simulateMessage(data: unknown) {
-    const event = Object.assign(new MessageEvent('message', { data: JSON.stringify(data) }));
+    const event = new MessageEvent('message', { data: JSON.stringify(data) });
     this.onmessage?.(event);
   }
 
@@ -53,11 +53,13 @@ const shelter1: ShelterRecord = {
   name: 'Shelter One',
   address: '1 Main St',
   phone: '+15550001111',
+  state: 'IL',
   beds: 10,
   capacity: 20,
   status: 'OPEN',
   needsList: [],
-  lastUpdated: '2026-01-01T00:00:00Z',
+  inventory: {},
+  updatedAt: '2026-01-01T00:00:00Z',
 };
 
 const shelter2: ShelterRecord = {
@@ -65,11 +67,13 @@ const shelter2: ShelterRecord = {
   name: 'Shelter Two',
   address: '2 Oak Ave',
   phone: '+15550002222',
+  state: 'IL',
   beds: 5,
   capacity: 10,
   status: 'OPEN',
   needsList: [],
-  lastUpdated: '2026-01-01T00:00:00Z',
+  inventory: {},
+  updatedAt: '2026-01-01T00:00:00Z',
 };
 
 // ---------------------------------------------------------------------------

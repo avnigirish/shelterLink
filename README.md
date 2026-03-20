@@ -411,6 +411,12 @@ SSE connections are stateless per Lambda invocation. The client dashboard implem
 ### Region Configuration
 All AWS SDK clients explicitly set `region: process.env['AWS_REGION'] ?? 'us-east-1'`. This prevents silent region fallback failures in Lambda and Next.js server components.
 
+### Cost vs. Performance
+The fully serverless architecture means a small shelter network running ShelterLink pays essentially $0 at rest — Lambda charges only on invocation, DynamoDB on-demand billing scales to zero when idle, and AppSync charges per connection-minute rather than per always-on server. At hackathon-scale traffic (dozens of updates per day, hundreds of dashboard viewers), the entire AWS bill rounds to pennies; the architecture only starts costing meaningful money when it's handling meaningful load, which is exactly the right trade-off for a community tool that may sit dormant for weeks between emergencies. The one deliberate performance concession is Lambda cold starts on the ingestion path — acceptable here because a 200–400ms cold-start delay on a shelter capacity update is invisible to users, whereas the cost of running a persistent server 24/7 for a tool that's used sporadically would be hard to justify for a nonprofit operator.
+
+### MCP (Model Context Protocol)
+The AI Community Advocate uses the Bedrock Converse API with inline tool definitions rather than a custom MCP server, because the tool surface is intentionally narrow — just `PledgeTool` and `AlertTool` — and both execute DynamoDB writes that are already wired into the Next.js API route's existing data-access layer. MCP would add real value here if the Advocate needed to reach external systems (a shelter's inventory spreadsheet, a volunteer scheduling API, a mapping service) or if the tool set needed to grow independently of the dashboard codebase; for the current two-tool scope, the overhead of a separate MCP server process, its own auth, and its own deployment lifecycle outweighs the benefit. The architecture is designed so that adding MCP later is straightforward — the `TOOLS` array in `route.ts` maps cleanly to MCP tool definitions, and the agentic loop already handles multi-turn tool execution in the pattern MCP expects.
+
 ---
 
 ## AWS Services Used
