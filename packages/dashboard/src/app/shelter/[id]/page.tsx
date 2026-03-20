@@ -7,6 +7,12 @@ import { PRIORITY_ORDER } from '@/types/shelter';
 import { NeedsFilter } from '@/components/NeedsFilter';
 import { InventoryPanel } from '@/components/InventoryPanel';
 import { CommunityChat } from '@/components/CommunityChat';
+import dynamic from 'next/dynamic';
+
+const AdvocateChat = dynamic(
+  () => import('@/components/AdvocateChat').then((m) => m.AdvocateChat),
+  { ssr: false }
+);
 
 export default async function ShelterDetailPage({ params }: { params: { id: string } }) {
   const [shelter, session] = await Promise.all([
@@ -59,6 +65,8 @@ export default async function ShelterDetailPage({ params }: { params: { id: stri
           Pledge a Donation
         </Link>
       </div>
+
+      <AdvocateChat shelterId={params.id} context="shelter" />
     </div>
   );
 }

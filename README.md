@@ -28,6 +28,40 @@ Community Member
 
 ---
 
+## AI Community Advocate
+
+ShelterLink includes an AI-powered Community Advocate built on Amazon Bedrock (Amazon Nova Pro). It's a conversational assistant embedded in the dashboard that helps volunteers and donors take immediate, high-impact action.
+
+**What it does:**
+- Matches your donation items to shelters with those items listed as CRITICAL or HIGH priority needs — using live DynamoDB data
+- Summarizes what's happening at a specific shelter based on its current needs and inventory
+- Guides new users through the Build for Impact mission and the ShelterLink workflow
+
+**Tone:** Empathetic, grounded, and action-oriented. Every response ends with a specific next step. Responses render with full markdown formatting (bold, lists, etc.).
+
+**Architecture:**
+```
+Browser (AdvocateChat component)
+  → POST /api/advocate  (Next.js API route, streaming SSE)
+  → Amazon Bedrock — Amazon Nova Pro (amazon.nova-pro-v1:0)
+  → Live DynamoDB shelter data injected into system prompt
+  → Streaming token-by-token response → Browser
+```
+
+**Example interaction:**
+> User: "I have winter coats — where should I go?"
+>
+> Advocate: "Winter coats are critically needed right now. Central Union Mission in DC has them listed as CRITICAL with 25 beds open — they're actively accepting donations today. Head to their shelter page to pledge your coats and check the community chat for drop-off timing."
+
+**Setup:**
+1. Set `BEDROCK_REGION=us-east-1` in `packages/dashboard/.env.local`
+2. Attach an IAM policy to your user/role with `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream` on `"Resource": "*"`
+3. Enable Amazon Nova Pro in the Bedrock console under Model access (no use case form required)
+
+> **Model note:** Amazon Nova Pro (`amazon.nova-pro-v1:0`) requires no Anthropic use case approval and is available immediately in new AWS accounts. Claude models require submitting an Anthropic use case form before first use.
+
+---
+
 ## New Features (Pivot)
 
 | Feature | Description |
@@ -36,6 +70,7 @@ Community Member
 | Community Chat | Real-time per-shelter chat via AWS AppSync GraphQL subscriptions |
 | Inventory Management | Shelter staff track current supply quantities via admin panel |
 | Donation Tracking | Donors pledge supplies; admins mark pledges as delivered |
+| AI Community Advocate | Bedrock-powered assistant matches donors to shelters, summarizes chat, onboards new users |
 
 ---
 
@@ -156,6 +191,9 @@ NEXTAUTH_URL=https://your-domain.com
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
 ALLOWED_EMAILS=           # comma-separated allowed GitHub emails
+
+# AI Community Advocate
+BEDROCK_REGION=us-east-1  # must have bedrock:InvokeModelWithResponseStream on claude-3-5-sonnet
 ```
 
 Lambda environment variables are set automatically by the CDK stack.
@@ -299,6 +337,7 @@ All AWS SDK clients explicitly set `region: process.env['AWS_REGION'] ?? 'us-eas
 | AWS Lambda (SQS trigger) | Update_Processor — parse, validate, write |
 | AWS DynamoDB | Multi-table data store — shelters, chat, donations |
 | AWS AppSync | GraphQL API — real-time Community Chat subscriptions |
+| Amazon Bedrock (Amazon Nova Pro) | AI Community Advocate — shelter matching, needs summarization, onboarding |
 | AWS SNS | Event bridge (retained for future Pinpoint re-enable) |
 | AWS SQS + DLQ | Reliable message delivery with failure capture |
 | AWS CDK | Infrastructure as code |

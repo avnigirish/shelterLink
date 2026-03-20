@@ -1,0 +1,12 @@
+{
+  "name": "Generate User Impact Report",
+  "version": "1.0.0",
+  "description": "After each agent session stops, generate a User Impact Report summarizing how many coordination actions the AI Community Advocate facilitated. Output is written to impact-report.md for inclusion in the technical write-up.",
+  "when": {
+    "type": "agentStop"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Generate a User Impact Report for the ShelterLink AI Community Advocate session that just completed. Review the conversation history and produce a concise markdown report covering: (1) number of shelter-matching queries answered, (2) number of donation items matched to specific shelters, (3) number of community chat summaries provided, (4) number of new-user onboarding interactions, (5) any notable coordination outcomes mentioned. Format as a short markdown document suitable for inclusion in a technical write-up. Write the report to impact-report.md in the workspace root. Keep it factual and grounded — only report what actually happened in this session."
+  }
+}

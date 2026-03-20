@@ -1,5 +1,11 @@
 import { getAllShelters } from '@/lib/db';
 import { ShelterList } from '@/components/ShelterList';
+import dynamic from 'next/dynamic';
+
+const AdvocateChat = dynamic(
+  () => import('@/components/AdvocateChat').then((m) => m.AdvocateChat),
+  { ssr: false }
+);
 
 export default async function HomePage() {
   const shelters = await getAllShelters();
@@ -15,6 +21,7 @@ export default async function HomePage() {
         </p>
       </div>
       <ShelterList initialShelters={shelters} />
+      <AdvocateChat context="home" />
     </section>
   );
 }

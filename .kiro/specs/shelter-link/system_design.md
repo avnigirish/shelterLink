@@ -167,6 +167,108 @@ This prevents silent region fallback to an incorrect default when `AWS_REGION` i
 
 ---
 
+---
+
+## AI Community Advocate — Agent Design
+
+### Overview
+
+The AI Community Advocate is a conversational assistant embedded in the ShelterLink dashboard. It uses Amazon Bedrock (Claude 3.5 Sonnet) to generate empathetic, action-oriented responses grounded in live shelter data from DynamoDB. It is not a general-purpose chatbot — every response is anchored to real shelter state.
+
+```
+Browser (AdvocateChat component)
+  → POST /api/advocate  (Next.js API route)
+  → Lambda advocate-handler  (Bedrock + DynamoDB)
+  → Amazon Bedrock — Claude 3.5 Sonnet (claude-3-5-sonnet-20241022)
+  → Structured JSON response → Browser
+```
+
+### Frontend Component — `AdvocateChat.tsx`
+
+- `'use client'` component, rendered on shelter detail pages and the home page
+- Floating chat bubble (bottom-right) — expands to a panel on click
+- Sends `POST /api/advocate` with `{ message: string, shelterId?: string, context: 'home' | 'shelter' }`
+- Streams response tokens via the Vercel AI SDK `useChat` hook (or plain `fetch` with `ReadableStream`)
+- Displays typing indicator while awaiting response
+- Starter prompts shown on first open:
+  - "I have blankets to donate — where should I go?"
+  - "What does this shelter need most right now?"
+  - "How can I help as a first-time volunteer?"
+
+### API Route — `POST /api/advocate`
+
+- Next.js App Router route handler (`src/app/api/advocate/route.ts`)
+- Accepts: `{ message: string, shelterId?: string, context: 'home' | 'shelter' }`
+- Steps:
+  1. Fetch relevant shelter data from DynamoDB (all shelters for `home` context; specific shelter for `shelter` context)
+  2. Build a structured system prompt (see below)
+  3. Call Bedrock `InvokeModelWithResponseStream` with Claude 3.5 Sonnet
+  4. Stream response back to client as `text/event-stream`
+- Auth: public (no session required) — rate-limited by IP via a lightweight DynamoDB counter
+- Error handling: returns a graceful fallback message if Bedrock is unavailable
+
+### Lambda — `advocate-handler` (optional dedicated function)
+
+For production, the Bedrock call can be extracted to a dedicated Lambda to keep the Next.js server lean. For hackathon scope, the API route handles it directly.
+
+### System Prompt Design
+
+The system prompt is assembled dynamically from live DynamoDB data:
+
+```
+You are the ShelterLink Community Advocate — an empathetic, grounded, and action-oriented assistant helping volunteers and donors make the most impact.
+
+Your mission: connect people with shelters that need them most, right now.
+
+CURRENT SHELTER DATA (as of <timestamp>):
+<shelter name> — <state> — <status> — <beds> beds available
+  Critical needs: <items>
+  High needs: <items>
+  Inventory: <items>
+
+CAPABILITIES:
+1. Suggest the best shelter(s) for a specific donation item
+2. Summarize recent community chat activity for a shelter
+3. Guide new users through how ShelterLink works and the Build for Impact mission
+4. Explain what "critical" vs "high" priority needs mean in practice
+
+TONE: Empathetic, grounded, and action-oriented. Never vague. Always end with a specific next step.
+CONSTRAINTS: Only reference shelters in the data above. Never fabricate bed counts or needs.
+```
+
+### Agent Capabilities
+
+| Capability | Data Source | Bedrock Role |
+|---|---|---|
+| Shelter matching by donation item | DynamoDB `needsList` scan | Rank and explain best matches |
+| Community chat summary | DynamoDB `shelterlink-chat` (last 20 msgs) | Summarize activity, surface coordination needs |
+| New user onboarding | Static mission copy | Explain Build for Impact, walk through steps |
+| Critical needs explanation | `needsList` priorities | Contextualize urgency in human terms |
+
+### CDK Changes Required
+
+```typescript
+// New Bedrock IAM permission on the advocate Lambda/Next.js role
+new iam.PolicyStatement({
+  actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
+  resources: ['arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'],
+})
+```
+
+Environment variable added to dashboard: `BEDROCK_REGION=us-east-1`
+
+### Data Flow
+
+1. User types "I have winter coats — which shelter needs them most?"
+2. `AdvocateChat` POSTs to `/api/advocate` with `{ message, context: 'home' }`
+3. API route fetches all shelters from DynamoDB, filters for `OPEN` status and `winter coats` in needsList
+4. Builds system prompt with live shelter data injected
+5. Calls `bedrock:InvokeModelWithResponseStream` — Claude 3.5 Sonnet
+6. Streams tokens back to browser; component renders incrementally
+7. Response: "Central Union Mission in DC has winter coats listed as CRITICAL right now — they have 25 beds open and are actively accepting donations. Head to their detail page to pledge or check the community chat for drop-off coordination."
+
+---
+
 ## AWS Well-Architected Alignment
 
 | Pillar | Implementation |

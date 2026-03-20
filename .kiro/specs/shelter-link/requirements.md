@@ -146,6 +146,25 @@ The architecture uses a Lambda Function URL as the public ingestion endpoint (re
 
 ---
 
+### Requirement 10: AI Community Advocate
+
+**User Story:** As a volunteer or donor visiting ShelterLink for the first time, I want to ask a conversational assistant what I should donate and where, so that I can take immediate, high-impact action without having to read through every shelter card.
+
+#### Acceptance Criteria
+
+1. THE Dashboard SHALL provide an AI Community Advocate chat interface accessible from the home page and each shelter detail page, without requiring authentication.
+2. WHEN a user asks which shelter needs a specific donation item, THE Advocate SHALL query live DynamoDB shelter data and respond with the shelter(s) whose active `needsList` contains that item, ranked by priority level (CRITICAL first).
+3. WHEN a user asks about recent activity at a shelter, THE Advocate SHALL summarize the last 20 messages from that shelter's Community Chat, surfacing coordination needs and volunteer activity.
+4. WHEN a new user asks how to get started, THE Advocate SHALL explain the Build for Impact mission of ShelterLink and walk through the steps: browse → find needs → pledge → coordinate via chat.
+5. THE Advocate SHALL only reference shelter data present in the live DynamoDB query result — it SHALL NOT fabricate bed counts, needs items, or shelter names.
+6. THE Advocate's tone SHALL be empathetic, grounded, and action-oriented — every response SHALL end with a specific, actionable next step.
+7. THE Advocate SHALL respond within 5 seconds for the first token (streaming) and complete within 30 seconds for a full response.
+8. IF the Bedrock service is unavailable, THE Advocate SHALL display a graceful fallback message directing the user to browse shelters directly, without exposing error details.
+9. THE Advocate API route SHALL be rate-limited per IP address to prevent abuse — maximum 20 requests per minute per IP.
+10. THE Advocate SHALL use Amazon Bedrock with Claude 3.5 Sonnet (`claude-3-5-sonnet-20241022`) as the foundation model, with an explicit `region: 'us-east-1'` in the Bedrock client.
+
+---
+
 ### Requirement 9: Region Configuration
 
 **User Story:** As a developer deploying ShelterLink, I want all AWS SDK clients to use an explicit region, so that deployments do not silently fail due to region misconfiguration.
