@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "name": "EnvironmentSync",
+  "description": "When .env.local is saved with DATA_MODE=PROD, verifies the DynamoDB table exists in the configured AWS region and confirms db.ts has explicit region initialization — prevents the 'Region is missing' error at demo time.",
+  "version": "1.0.0",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "packages/dashboard/.env.local"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "The file packages/dashboard/.env.local was just saved. Run the EnvironmentSync check:\n\n1. Read packages/dashboard/.env.local and check if DATA_MODE=PROD is set (not commented out).\n\n2. If DATA_MODE is NOT set to PROD (it's MOCK, missing, or commented out):\n   - Respond: \"EnvironmentSync: DATA_MODE is MOCK — no AWS checks needed. Local mock data is active.\"\n   - Stop here.\n\n3. If DATA_MODE=PROD is set, run the verification script:\n   bash scripts/env-sync.sh\n\n4. Read the script output and report the results in chat using this format:\n\n**EnvironmentSync — PROD mode detected**\n\n| Check | Status | Detail |\n|---|---|---|\n| AWS_REGION set | ✅/❌ | value or fix |\n| SHELTER_TABLE set | ✅/❌ | value or fix |\n| AWS CLI available | ✅/❌ | version or install link |\n| DynamoDB table exists | ✅/❌ | table status or fix command |\n| db.ts explicit region | ✅/❌ | pass or fix snippet |\n\n5. If any check failed:\n   - List each failure with a one-line fix\n   - If the DynamoDB table does not exist, remind the user to run: cd packages/infra && npx cdk deploy\n   - If db.ts is missing the explicit region, show the correct DynamoDBClient initialization:\n     ```typescript\n     new DynamoDBClient({ region: process.env['AWS_REGION'] ?? 'us-east-1' })\n     ```\n   - Do NOT automatically edit any files — only report findings and fixes\n\n6. If all checks passed:\n   - Respond: \"EnvironmentSync: All checks passed ✅ — safe to run in PROD mode.\""
+  }
+}
