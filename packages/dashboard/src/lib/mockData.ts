@@ -9,6 +9,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'Helping Hands of Springfield',
     address: '2200 Shale St, Springfield, IL 62703',
     phone: '(217) 522-0048',
+    website: 'https://www.helpinghandsspringfield.org',
     state: 'IL',
     beds: 14, capacity: 40, status: 'OPEN',
     needsList: [
@@ -24,6 +25,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'Contact Ministries',
     address: '1100 E Adams St, Springfield, IL 62703',
     phone: '(217) 753-3939',
+    website: 'https://www.contactministries.org',
     state: 'IL',
     beds: 0, capacity: 30, status: 'FULL',
     needsList: [
@@ -39,6 +41,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'Salvation Army — Springfield',
     address: '1501 N 19th St, Springfield, IL 62703',
     phone: '(217) 528-7573',
+    website: 'https://centralusa.salvationarmy.org/springfield',
     state: 'IL',
     beds: 22, capacity: 60, status: 'OPEN',
     needsList: [
@@ -55,6 +58,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'Covenant House New Jersey',
     address: '330 Washington St, Newark, NJ 07102',
     phone: '(973) 621-8705',
+    website: 'https://www.covenanthouseni.org',
     state: 'NJ',
     beds: 18, capacity: 50, status: 'OPEN',
     needsList: [
@@ -71,6 +75,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'Eva\'s Village Emergency Shelter',
     address: '393 Main St, Paterson, NJ 07501',
     phone: '(973) 523-6220',
+    website: 'https://www.evasvillage.org',
     state: 'NJ',
     beds: 5, capacity: 75, status: 'OPEN',
     needsList: [
@@ -87,6 +92,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'Rescue Mission of Trenton',
     address: '98 Carroll St, Trenton, NJ 08609',
     phone: '(609) 695-1436',
+    website: 'https://www.rescuemissionoftrenton.org',
     state: 'NJ',
     beds: 0, capacity: 45, status: 'FULL',
     needsList: [
@@ -101,6 +107,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'HomeFront Family Shelter',
     address: '1880 Princeton Ave, Lawrenceville, NJ 08648',
     phone: '(609) 989-9417',
+    website: 'https://www.homefrontnj.org',
     state: 'NJ',
     beds: 12, capacity: 30, status: 'OPEN',
     needsList: [
@@ -118,6 +125,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'Bowery Mission',
     address: '227 Bowery, New York, NY 10002',
     phone: '(212) 226-6214',
+    website: 'https://www.bowery.org',
     state: 'NY',
     beds: 30, capacity: 120, status: 'OPEN',
     needsList: [
@@ -134,6 +142,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'Covenant House New York',
     address: '460 W 41st St, New York, NY 10036',
     phone: '(212) 613-0300',
+    website: 'https://www.covenanthouse.org/homeless-shelters/new-york',
     state: 'NY',
     beds: 45, capacity: 200, status: 'OPEN',
     needsList: [
@@ -149,6 +158,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'Brooklyn Women\'s Shelter',
     address: '116 Williams Ave, Brooklyn, NY 11207',
     phone: '(718) 485-9700',
+    website: 'https://www.nyc.gov/site/dhs/shelter/shelter.page',
     state: 'NY',
     beds: 0, capacity: 80, status: 'FULL',
     needsList: [
@@ -164,6 +174,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'Samaritan Village — Queens',
     address: '138-02 Queens Blvd, Briarwood, NY 11435',
     phone: '(718) 206-2000',
+    website: 'https://www.samaritanvillage.org',
     state: 'NY',
     beds: 8, capacity: 35, status: 'OPEN',
     needsList: [
@@ -179,6 +190,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'Albany County Family Shelter',
     address: '95 Central Ave, Albany, NY 12206',
     phone: '(518) 447-7905',
+    website: 'https://www.albanycounty.com/departments/social-services',
     state: 'NY',
     beds: 20, capacity: 55, status: 'OPEN',
     needsList: [
@@ -196,6 +208,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'Doorways for Women and Families',
     address: '2020 N 14th St, Arlington, VA 22201',
     phone: '(703) 237-0925',
+    website: 'https://www.doorwaysva.org',
     state: 'VA',
     beds: 10, capacity: 40, status: 'OPEN',
     needsList: [
@@ -211,6 +224,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'Richmond Rescue Mission',
     address: '2 W Grace St, Richmond, VA 23220',
     phone: '(804) 648-2748',
+    website: 'https://www.rrmhope.org',
     state: 'VA',
     beds: 35, capacity: 90, status: 'OPEN',
     needsList: [
@@ -227,6 +241,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'ACTS — A Community Shelter',
     address: '14416 Jefferson Davis Hwy, Woodbridge, VA 22191',
     phone: '(703) 221-8460',
+    website: 'https://www.actspwc.org',
     state: 'VA',
     beds: 0, capacity: 60, status: 'FULL',
     needsList: [
@@ -243,6 +258,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'Helping Up Mission',
     address: '1029 E Baltimore St, Baltimore, MD 21202',
     phone: '(410) 675-7500',
+    website: 'https://www.helpingupmission.org',
     state: 'MD',
     beds: 40, capacity: 150, status: 'OPEN',
     needsList: [
@@ -259,6 +275,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'Montgomery County Family Shelter',
     address: '8900 Georgia Ave, Silver Spring, MD 20910',
     phone: '(240) 777-4000',
+    website: 'https://www.montgomerycountymd.gov/HHS-Program/RSS/shelter.html',
     state: 'MD',
     beds: 15, capacity: 50, status: 'OPEN',
     needsList: [
@@ -274,6 +291,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'Arundel House of Hope',
     address: '251 Buschs Frontage Rd, Annapolis, MD 21401',
     phone: '(410) 573-0333',
+    website: 'https://www.arundelhouse.org',
     state: 'MD',
     beds: 0, capacity: 35, status: 'FULL',
     needsList: [
@@ -290,6 +308,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'Central Union Mission',
     address: '65 Massachusetts Ave NW, Washington, DC 20001',
     phone: '(202) 745-7118',
+    website: 'https://www.missiondc.org',
     state: 'DC',
     beds: 25, capacity: 100, status: 'OPEN',
     needsList: [
@@ -306,6 +325,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'Miriam\'s Kitchen',
     address: '2401 Virginia Ave NW, Washington, DC 20037',
     phone: '(202) 452-8926',
+    website: 'https://www.miriamskitchen.org',
     state: 'DC',
     beds: 0, capacity: 70, status: 'FULL',
     needsList: [
@@ -320,6 +340,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'N Street Village',
     address: '1333 N St NW, Washington, DC 20005',
     phone: '(202) 939-2060',
+    website: 'https://www.nstreetvillage.org',
     state: 'DC',
     beds: 18, capacity: 55, status: 'OPEN',
     needsList: [

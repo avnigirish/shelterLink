@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'crypto';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 import type { DonationItem } from '@/types/shelter';
+import { addMessage } from '@/lib/mockChatStore';
 
 const TABLE = 'shelterlink-donations';
 
@@ -56,6 +57,16 @@ export async function POST(req: NextRequest) {
   const pledgedAt = new Date().toISOString();
 
   if (process.env['USE_MOCK_DATA'] === 'true') {
+    const donor = typeof donorName === 'string' && donorName.trim() ? donorName.trim() : 'Anonymous';
+    for (const it of items as DonationItem[]) {
+      addMessage({
+        roomId: shelterId.trim(),
+        timestamp: new Date().toISOString(),
+        senderName: 'Community Advocate',
+        message: `🤝 ${donor} has pledged to donate ${it.quantity}× ${it.item}`,
+        userType: 'ADMIN',
+      });
+    }
     return NextResponse.json({ ok: true, donationId: `mock-${Date.now()}` });
   }
 

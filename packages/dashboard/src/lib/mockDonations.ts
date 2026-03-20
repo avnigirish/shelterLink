@@ -45,7 +45,7 @@ export const MOCK_DONATIONS: DonationRecord[] = [
   {
     userId: 'user-david',
     donationId: 'donation-004',
-    shelterId: 'shelter-007',
+    shelterId: 'shelter-101',
     shelterName: 'Covenant House New Jersey',
     donorName: 'David Kim',
     donorEmail: 'david@example.com',
@@ -59,7 +59,7 @@ export const MOCK_DONATIONS: DonationRecord[] = [
   {
     userId: 'user-elena',
     donationId: 'donation-005',
-    shelterId: 'shelter-010',
+    shelterId: 'shelter-201',
     shelterName: 'Bowery Mission',
     donorName: 'Elena Vasquez',
     donorEmail: 'elena@example.com',
@@ -74,7 +74,7 @@ export const MOCK_DONATIONS: DonationRecord[] = [
   {
     userId: 'user-frank',
     donationId: 'donation-006',
-    shelterId: 'shelter-015',
+    shelterId: 'shelter-501',
     shelterName: 'Central Union Mission',
     donorName: 'Frank Okafor',
     donorEmail: 'frank@example.com',
@@ -96,7 +96,7 @@ export const MOCK_DONATIONS: DonationRecord[] = [
   {
     userId: 'user-henry',
     donationId: 'donation-008',
-    shelterId: 'shelter-007',
+    shelterId: 'shelter-101',
     shelterName: 'Covenant House New Jersey',
     donorName: 'Henry Patel',
     donorEmail: 'henry@example.com',

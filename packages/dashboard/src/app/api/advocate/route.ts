@@ -10,7 +10,7 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { getAllShelters, getShelterById } from '@/lib/db';
 import type { ShelterRecord } from '@/types/shelter';
-import { MOCK_MESSAGES } from '@/lib/mockChat';
+import { addMessage } from '@/lib/mockChatStore';
 import { randomUUID } from 'crypto';
 
 const MODEL_ID = 'amazon.nova-pro-v1:0';
@@ -171,7 +171,7 @@ async function executeAlertTool(input: Record<string, unknown>): Promise<string>
   const chatTable = process.env['CHAT_TABLE'] ?? 'shelterlink-chat';
 
   if (process.env['USE_MOCK_DATA'] === 'true') {
-    MOCK_MESSAGES.push({
+    addMessage({
       roomId: shelterId,
       timestamp: new Date(timestamp).toISOString(),
       senderName: 'Community Advocate',

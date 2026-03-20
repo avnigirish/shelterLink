@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, QueryCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 import type { ChatMessage, UserType } from '@/types/shelter';
-import { MOCK_MESSAGES } from '@/lib/mockChat';
+import { getMessages, addMessage } from '@/lib/mockChatStore';
 
 const TABLE = 'shelterlink-chat';
 const USE_MOCK = process.env.USE_MOCK_DATA === 'true';
@@ -28,7 +28,7 @@ export async function GET(
   const { shelterId } = params;
 
   if (USE_MOCK) {
-    const messages = MOCK_MESSAGES.filter((m) => m.roomId === shelterId);
+    const messages = getMessages(shelterId);
     return NextResponse.json(messages);
   }
 
@@ -71,7 +71,7 @@ export async function POST(
   };
 
   if (USE_MOCK) {
-    MOCK_MESSAGES.push(msg);
+    addMessage(msg);
     return NextResponse.json({ ok: true });
   }
 

@@ -7,6 +7,7 @@ import { PRIORITY_ORDER } from '@/types/shelter';
 import { NeedsFilter } from '@/components/NeedsFilter';
 import { InventoryPanel } from '@/components/InventoryPanel';
 import { CommunityChat } from '@/components/CommunityChat';
+import { getMessages } from '@/lib/mockChatStore';
 import dynamic from 'next/dynamic';
 
 const AdvocateChat = dynamic(
@@ -21,6 +22,11 @@ export default async function ShelterDetailPage({ params }: { params: { id: stri
   ]);
 
   if (!shelter) return notFound();
+
+  const USE_MOCK = process.env.USE_MOCK_DATA === 'true';
+  const initialMessages = USE_MOCK
+    ? getMessages(params.id)
+    : [];
 
   const activeNeeds = shelter.needsList
     .filter((n) => !n.fulfilled)
@@ -39,7 +45,18 @@ export default async function ShelterDetailPage({ params }: { params: { id: stri
         </Link>
         <h2 className="text-2xl font-bold text-text-DEFAULT dark:text-dark-text mt-4 mb-1">{shelter.name}</h2>
         <p className="text-text-subtle dark:text-dark-subtle text-sm mb-1">{shelter.address}</p>
-        <p className="text-text-subtle dark:text-dark-subtle text-sm mb-6">{shelter.phone}</p>
+        <p className="text-text-subtle dark:text-dark-subtle text-sm mb-1">{shelter.phone}</p>
+        {shelter.website && (
+          <a
+            href={shelter.website}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-brand-600 dark:text-brand-400 hover:underline focus-visible:outline-none
+              focus-visible:ring-2 focus-visible:ring-brand-500 rounded"
+          >
+            Visit website ↗
+          </a>
+        )}
 
         <section aria-label="Current needs">
           <h3 className="text-lg font-semibold text-text-DEFAULT dark:text-dark-text mb-3">Current Needs</h3>
@@ -54,7 +71,7 @@ export default async function ShelterDetailPage({ params }: { params: { id: stri
         />
 
         <div className="mt-8">
-          <CommunityChat shelterId={params.id} initialMessages={[]} />
+          <CommunityChat shelterId={params.id} initialMessages={initialMessages} />
         </div>
 
         <div className="mt-6">

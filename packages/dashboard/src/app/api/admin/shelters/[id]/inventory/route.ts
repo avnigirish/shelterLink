@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { getMockShelterById } from '@/lib/mockShelterStore';
 
 const ALLOWED_ORIGIN = process.env['NEXT_PUBLIC_ALLOWED_ORIGIN'] ?? 'http://localhost:3000';
 const TABLE = process.env['SHELTER_TABLE'];
@@ -52,6 +53,10 @@ export async function PATCH(
   }
 
   if (process.env['USE_MOCK_DATA'] === 'true') {
+    const shelter = getMockShelterById(params.id);
+    if (shelter) {
+      shelter.inventory[item] = quantity;
+    }
     return NextResponse.json({ ok: true });
   }
 
