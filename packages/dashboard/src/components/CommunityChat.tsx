@@ -9,10 +9,10 @@ interface Props {
 }
 
 const USER_TYPE_COLORS: Record<UserType, string> = {
-  VOLUNTEER: 'bg-green-100 text-green-800',
-  DONOR: 'bg-blue-100 text-blue-800',
-  STAFF: 'bg-purple-100 text-purple-800',
-  ADMIN: 'bg-red-100 text-red-800',
+  VOLUNTEER: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+  DONOR:     'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+  STAFF:     'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
+  ADMIN:     'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
 };
 
 function relativeTime(iso: string): string {
@@ -26,6 +26,12 @@ function relativeTime(iso: string): string {
 }
 
 const USER_TYPE_OPTIONS: Exclude<UserType, 'ADMIN'>[] = ['VOLUNTEER', 'DONOR', 'STAFF'];
+
+const inputClass = `text-sm border border-surface-border dark:border-dark-border rounded px-2 py-1.5
+  bg-surface-DEFAULT dark:bg-dark-elevated
+  text-text-DEFAULT dark:text-dark-text
+  placeholder:text-text-faint dark:placeholder:text-dark-subtle
+  focus:outline-none focus:ring-2 focus:ring-brand-500`;
 
 export function CommunityChat({ shelterId, initialMessages }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
@@ -51,7 +57,6 @@ export function CommunityChat({ shelterId, initialMessages }: Props) {
     return () => clearInterval(interval);
   }, [shelterId]);
 
-  // Scroll to bottom when new messages arrive
   useEffect(() => {
     if (listRef.current) {
       listRef.current.scrollTop = listRef.current.scrollHeight;
@@ -73,7 +78,6 @@ export function CommunityChat({ shelterId, initialMessages }: Props) {
         }),
       });
       setMessageText('');
-      // Immediately fetch updated messages
       const res = await fetch(`/api/chat/${shelterId}`);
       if (res.ok) {
         const data = await res.json() as ChatMessage[];
@@ -85,9 +89,12 @@ export function CommunityChat({ shelterId, initialMessages }: Props) {
   }
 
   return (
-    <section aria-label="Community chat" className="border border-surface-border rounded-lg overflow-hidden bg-white">
-      <div className="px-4 py-3 border-b border-surface-border bg-gray-50">
-        <h3 className="text-base font-semibold text-text">Community Chat</h3>
+    <section aria-label="Community chat"
+      className="border border-surface-border dark:border-dark-border rounded-lg overflow-hidden
+        bg-surface-DEFAULT dark:bg-dark-surface">
+      <div className="px-4 py-3 border-b border-surface-border dark:border-dark-border
+        bg-surface-muted dark:bg-dark-elevated">
+        <h3 className="text-base font-semibold text-text-DEFAULT dark:text-dark-text">Community Chat</h3>
       </div>
 
       {/* Message list */}
@@ -98,23 +105,23 @@ export function CommunityChat({ shelterId, initialMessages }: Props) {
         className="h-64 overflow-y-auto px-4 py-3 space-y-3 list-none"
       >
         {messages.length === 0 ? (
-          <li className="text-text-subtle text-sm text-center py-8">
+          <li className="text-text-subtle dark:text-dark-subtle text-sm text-center py-8">
             No messages yet — be the first to post
           </li>
         ) : (
           messages.map((msg) => (
             <li key={`${msg.roomId}-${msg.timestamp}`} className="flex flex-col gap-0.5">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-medium text-sm text-text">{msg.senderName}</span>
+                <span className="font-medium text-sm text-text-DEFAULT dark:text-dark-text">{msg.senderName}</span>
                 <span
                   className={`text-xs px-1.5 py-0.5 rounded font-medium ${USER_TYPE_COLORS[msg.userType]}`}
                   aria-label={`User type: ${msg.userType.toLowerCase()}`}
                 >
                   {msg.userType}
                 </span>
-                <span className="text-xs text-text-subtle">{relativeTime(msg.timestamp)}</span>
+                <span className="text-xs text-text-subtle dark:text-dark-subtle">{relativeTime(msg.timestamp)}</span>
               </div>
-              <p className="text-sm text-text">{msg.message}</p>
+              <p className="text-sm text-text-muted dark:text-dark-muted">{msg.message}</p>
             </li>
           ))
         )}
@@ -123,7 +130,7 @@ export function CommunityChat({ shelterId, initialMessages }: Props) {
       {/* Input form */}
       <form
         onSubmit={handleSend}
-        className="border-t border-surface-border px-4 py-3 space-y-2"
+        className="border-t border-surface-border dark:border-dark-border px-4 py-3 space-y-2"
         aria-label="Send a message"
       >
         <div className="flex gap-2">
@@ -132,13 +139,13 @@ export function CommunityChat({ shelterId, initialMessages }: Props) {
             value={senderName}
             onChange={(e) => setSenderName(e.target.value)}
             placeholder="Your name (optional)"
-            className="flex-1 text-sm border border-surface-border rounded px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={`flex-1 ${inputClass}`}
             aria-label="Your name"
           />
           <select
             value={userType}
             onChange={(e) => setUserType(e.target.value as Exclude<UserType, 'ADMIN'>)}
-            className="text-sm border border-surface-border rounded px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={inputClass}
             aria-label="Your role"
           >
             {USER_TYPE_OPTIONS.map((t) => (
@@ -152,14 +159,18 @@ export function CommunityChat({ shelterId, initialMessages }: Props) {
             value={messageText}
             onChange={(e) => setMessageText(e.target.value)}
             placeholder="Type a message…"
-            className="flex-1 text-sm border border-surface-border rounded px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={`flex-1 ${inputClass}`}
             aria-label="Message"
             required
           />
           <button
             type="submit"
             disabled={sending || !messageText.trim()}
-            className="px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+            className="px-3 py-1.5 text-sm font-medium
+              bg-brand-500 hover:bg-brand-600 text-white rounded
+              disabled:opacity-50
+              focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1
+              dark:focus:ring-offset-dark-surface"
           >
             {sending ? 'Sending…' : 'Send'}
           </button>

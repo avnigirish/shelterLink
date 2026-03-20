@@ -6,7 +6,14 @@ export default async function HomePage() {
 
   return (
     <section aria-label="Shelter capacity list">
-      <h2 className="text-2xl font-bold text-text mb-4">Shelter Availability</h2>
+      <div className="mb-6">
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">
+          Shelters near you
+        </h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Click any shelter to see needs, inventory, and community chat.
+        </p>
+      </div>
       <ShelterList initialShelters={shelters} />
     </section>
   );
