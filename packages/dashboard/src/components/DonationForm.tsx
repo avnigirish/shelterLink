@@ -55,7 +55,7 @@ export function DonationForm({ shelterId, shelterName, suggestedNeeds = [], pres
       .map((it) => ({ item: it.item.trim(), quantity: Math.max(1, it.quantity) }));
 
     if (validItems.length === 0) {
-      setError('No items added — please add at least one item to donate.');
+      setError('No items added - please add at least one item to donate.');
       return;
     }
 
@@ -161,11 +161,11 @@ export function DonationForm({ shelterId, shelterName, suggestedNeeds = [], pres
                     focus:outline-none focus:ring-2 focus:ring-brand-500"
                   aria-label={`Item ${index + 1} name`}
                 >
-                  <option value="">Select an item\u2026</option>
+                  <option value="">Select an item...</option>
                   <optgroup label="Current needs">
                     {suggestedNeeds.map((n) => (
                       <option key={n.item} value={n.item}>
-                        {n.item} \u2014 {n.priority.charAt(0) + n.priority.slice(1).toLowerCase()} priority
+                        {n.item} - {n.priority.charAt(0) + n.priority.slice(1).toLowerCase()} priority
                       </option>
                     ))}
                   </optgroup>
@@ -227,7 +227,7 @@ export function DonationForm({ shelterId, shelterName, suggestedNeeds = [], pres
               .filter((p) => suggestedNeeds.some((n) => n.priority === p))
               .map((p) => (
                 <span key={p} className={PRIORITY_BADGE[p]}>
-                  \u25cf {p.charAt(0) + p.slice(1).toLowerCase()} priority
+                  {p.charAt(0) + p.slice(1).toLowerCase()} priority
                 </span>
               ))}
           </div>
@@ -256,7 +256,7 @@ export function DonationForm({ shelterId, shelterName, suggestedNeeds = [], pres
           disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1
           dark:focus:ring-offset-dark-surface"
       >
-        {submitting ? 'Submitting\u2026' : 'Submit Pledge'}
+        {submitting ? 'Submitting...' : 'Submit Pledge'}
       </button>
     </form>
   );
