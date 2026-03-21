@@ -35,6 +35,85 @@ Volunteer / Donor (Browser)
 
 ---
 
+## Quick Start
+
+```bash
+# Install dependencies
+npm install
+
+# Run the dashboard locally with mock data (no AWS needed)
+cd packages/dashboard && npm run dev
+
+# Run all tests
+npm run test --workspaces
+```
+
+### Local dev with mock data
+
+The dashboard defaults to mock data (real US shelters) when `USE_MOCK_DATA=true` is set in `packages/dashboard/.env.local`. No AWS credentials required.
+
+```bash
+# packages/dashboard/.env.local
+AWS_REGION=us-east-1
+USE_MOCK_DATA=true
+```
+
+---
+
+## Environment Variables
+
+Create `packages/dashboard/.env.local` before running locally:
+
+```bash
+# Local dev (mock data — no AWS needed)
+AWS_REGION=us-east-1
+USE_MOCK_DATA=true
+
+# Production (real DynamoDB + AppSync)
+AWS_REGION=us-east-1
+SHELTER_TABLE=shelterlink-shelters
+CHAT_TABLE=shelterlink-chat
+DONATIONS_TABLE=shelterlink-donations
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+NEXT_PUBLIC_APPSYNC_ENDPOINT=
+NEXT_PUBLIC_APPSYNC_API_KEY=
+
+# Admin auth
+NEXT_PUBLIC_ALLOWED_ORIGIN=https://your-domain.com
+NEXTAUTH_SECRET=          # openssl rand -base64 32
+NEXTAUTH_URL=https://your-domain.com
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+ALLOWED_EMAILS=           # comma-separated allowed GitHub emails
+
+# AI Community Advocate
+BEDROCK_REGION=us-east-1  # must have bedrock:InvokeModel and bedrock:Converse on amazon.nova-pro-v1:0
+```
+
+Lambda environment variables are set automatically by the CDK stack.
+
+---
+
+## New Features
+
+| Feature | Description |
+|---|---|
+| Lambda Function URL | Public HTTPS endpoint for update ingestion — replaces Pinpoint for demo/hackathon |
+| Real-Time Dashboard | SSE-powered shelter list updates within 5 seconds of any capacity change |
+| Prioritized Needs List | Per-shelter needs ranked CRITICAL → HIGH → MEDIUM → LOW, filterable without page reload |
+| Inventory Management | Shelter staff track current supply quantities via admin panel; atomic DynamoDB `UpdateItem` |
+| Community Chat | Real-time per-shelter chat via AWS AppSync GraphQL subscriptions |
+| Donation Tracking | Donors pledge supplies; admins mark pledges as delivered; full status history |
+| AI Community Advocate | Bedrock-powered agentic assistant — matches donors to shelters, executes pledges and chat alerts via tools |
+| Community Activity Feed | Pledge notifications auto-posted to shelter chat by the Advocate agent |
+| Admin Panel | GitHub OAuth-gated registry management, inventory editing, and donation oversight |
+| SMS Broadcast Alerts | Outbound SMS notifications via Pinpoint when shelters go FULL/CLOSED or gain CRITICAL needs — volunteers and donors subscribe per-shelter via the shelter detail page; STOP/START keyword opt-out/in supported via inbound SMS |
+| Donation Form Needs Dropdown | Pledge form pre-populates a dropdown of the shelter's current unfulfilled needs (with priority labels); donors can also type a custom item. Deep-linkable via `?item=<item>` from the Supply Drive page. |
+| Advocate Quick-Select Chips | On shelter detail pages, the AI Advocate chat panel shows color-coded chips for the shelter's active needs (red = CRITICAL, orange = HIGH). Clicking a chip pre-fills the input so donors don't have to type. |
+
+---
+
 ## AI Community Advocate
 
 ShelterLink includes an AI-powered Community Advocate built on Amazon Bedrock (Amazon Nova Pro). It's a conversational assistant embedded in the dashboard that helps volunteers and donors take immediate, high-impact action.
@@ -144,25 +223,6 @@ When the Advocate agent processes a donation pledge, it automatically posts a no
 
 ---
 
-## New Features
-
-| Feature | Description |
-|---|---|
-| Lambda Function URL | Public HTTPS endpoint for update ingestion — replaces Pinpoint for demo/hackathon |
-| Real-Time Dashboard | SSE-powered shelter list updates within 5 seconds of any capacity change |
-| Prioritized Needs List | Per-shelter needs ranked CRITICAL → HIGH → MEDIUM → LOW, filterable without page reload |
-| Inventory Management | Shelter staff track current supply quantities via admin panel; atomic DynamoDB `UpdateItem` |
-| Community Chat | Real-time per-shelter chat via AWS AppSync GraphQL subscriptions |
-| Donation Tracking | Donors pledge supplies; admins mark pledges as delivered; full status history |
-| AI Community Advocate | Bedrock-powered agentic assistant — matches donors to shelters, executes pledges and chat alerts via tools |
-| Community Activity Feed | Pledge notifications auto-posted to shelter chat by the Advocate agent |
-| Admin Panel | GitHub OAuth-gated registry management, inventory editing, and donation oversight |
-| SMS Broadcast Alerts | Outbound SMS notifications via Pinpoint when shelters go FULL/CLOSED or gain CRITICAL needs — volunteers and donors subscribe per-shelter via the shelter detail page; STOP/START keyword opt-out/in supported via inbound SMS |
-| Donation Form Needs Dropdown | Pledge form pre-populates a dropdown of the shelter's current unfulfilled needs (with priority labels); donors can also type a custom item. Deep-linkable via `?item=<item>` from the Supply Drive page. |
-| Advocate Quick-Select Chips | On shelter detail pages, the AI Advocate chat panel shows color-coded chips for the shelter's active needs (red = CRITICAL, orange = HIGH). Clicking a chip pre-fills the input so donors don't have to type. |
-
----
-
 ## Project Structure
 
 ```
@@ -256,30 +316,7 @@ shelterlink/
 
 ---
 
-## Quick Start
-
-```bash
-# Install dependencies
-npm install
-
-# Run the dashboard locally with mock data (no AWS needed)
-cd packages/dashboard && npm run dev
-
-# Run all tests
-npm run test --workspaces
-```
-
-### Local dev with mock data
-
-The dashboard defaults to mock data (real Springfield, IL shelters) when `USE_MOCK_DATA=true` is set in `packages/dashboard/.env.local`. No AWS credentials required.
-
-```bash
-# packages/dashboard/.env.local
-AWS_REGION=us-east-1
-USE_MOCK_DATA=true
-```
-
-### Deploy to AWS
+## Deploy to AWS
 
 ```bash
 # First-time bootstrap
@@ -298,42 +335,22 @@ NEXT_PUBLIC_APPSYNC_API_KEY=<key>
 
 ---
 
-## Environment Variables
+## Technical Write-Up: Learning with Kiro and Spec-Driven Development
 
-Create `packages/dashboard/.env.local` before running locally:
+### Project Overview
 
-```bash
-# Local dev (mock data — no AWS needed)
-AWS_REGION=us-east-1
-USE_MOCK_DATA=true
+**The problem:** When a shelter hits capacity during an emergency, the people who could help — volunteers, donors, coordinators — often have no way to know in real time. They call around, check outdated websites, or show up with supplies to a shelter that's already full with no idea where to redirect them.
 
-# Production (real DynamoDB + AppSync)
-AWS_REGION=us-east-1
-SHELTER_TABLE=shelterlink-shelters
-CHAT_TABLE=shelterlink-chat
-DONATIONS_TABLE=shelterlink-donations
-AWS_ACCESS_KEY_ID=
-AWS_SECRET_ACCESS_KEY=
-NEXT_PUBLIC_APPSYNC_ENDPOINT=
-NEXT_PUBLIC_APPSYNC_API_KEY=
+**Target users:** Three groups with very different needs:
+- *Shelter staff* — non-technical, time-pressured, need to update capacity without logging into anything
+- *Volunteers and donors* — need to know where help is needed right now, not yesterday
+- *Shelter administrators* — need oversight of the registry, inventory, and donation pipeline
 
-# Admin auth
-NEXT_PUBLIC_ALLOWED_ORIGIN=https://your-domain.com
-NEXTAUTH_SECRET=          # openssl rand -base64 32
-NEXTAUTH_URL=https://your-domain.com
-GITHUB_CLIENT_ID=
-GITHUB_CLIENT_SECRET=
-ALLOWED_EMAILS=           # comma-separated allowed GitHub emails
+**Solution:** ShelterLink connects these three groups through a single real-time system. Staff text a structured SMS update (`BEDS 12/50 STATUS open NEEDS blankets:high`). That update flows through Lambda → DynamoDB → SSE to a public dashboard any volunteer can open in a browser — no account, no app, no friction. An AI Community Advocate powered by Amazon Bedrock helps donors find the right shelter and execute a pledge in one message. Community chat, donation tracking, and SMS broadcast alerts complete the coordination loop.
 
-# AI Community Advocate
-BEDROCK_REGION=us-east-1  # must have bedrock:InvokeModel and bedrock:Converse on amazon.nova-pro-v1:0
-```
-
-Lambda environment variables are set automatically by the CDK stack.
+**Key features:** Real-time SSE dashboard, per-shelter community chat via AppSync, agentic AI donation matching, supply pledge tracking, SMS broadcast alerts, and a GitHub OAuth-gated admin panel for registry and inventory management.
 
 ---
-
-## Technical Write-Up: Learning with Kiro and Spec-Driven Development
 
 ### The Problem with Vibe Coding Alone
 
@@ -410,6 +427,21 @@ When the *why* is in the steering doc, Kiro doesn't just follow the rule — it 
 
 ---
 
+### Agent Hooks — Automating the Feedback Loop
+
+Beyond steering docs and specs, Kiro's agent hooks let you wire IDE events to automated agent actions. ShelterLink uses four:
+
+| Hook | Trigger | Action |
+|---|---|---|
+| `environment-sync` | `.env.local` saved | Validates all required env vars are present and warns on missing keys |
+| `mock-to-prod-toggle` | Manual trigger | Switches `USE_MOCK_DATA` between `true` and `false` across the relevant files |
+| `react-quality-a11y-audit` | Any `.tsx` file saved | Runs an accessibility and code quality audit on the changed component |
+| `post-task-test-runner` | Spec task marked complete | Automatically runs `vitest --run` to confirm the task didn't break anything |
+
+The `post-task-test-runner` hook was the most valuable. Every time Kiro completed a spec task, tests ran automatically — no manual `npm test` between tasks. Regressions surfaced immediately, before the next task started. That tight loop is what kept 155 tests passing across the full build.
+
+---
+
 ### Pivoting Under Pressure
 
 Mid-project, AWS Pinpoint hit a `SubscriptionRequiredException` wall — new accounts require manual sandbox approval with a multi-day lead time. Rather than block on that, the architecture pivoted:
@@ -435,6 +467,45 @@ The pivot took less than a day because the spec documents absorbed the change cl
 | No test coverage | Vitest unit tests + property-based round-trip tests |
 | `any` types throughout | Explicit types with `unknown` + type guards |
 | Streaming-only AI responses | Agentic loop with tool execution + conversation history |
+
+---
+
+### Security & Scalability
+
+**Security decisions made explicit in the design:**
+
+- *Phone number masking* — `maskPhone()` is called at every log boundary in the Lambda. Phone numbers never appear in plaintext in CloudWatch. This is enforced by a steering rule so Kiro never generates a log line that skips it.
+- *Admin auth guard* — every admin API route calls `getServerSession(authOptions)` and returns 401 if no session. The layout-level guard is a second layer, not the only layer.
+- *Origin validation* — admin API routes check the `origin` header against `NEXT_PUBLIC_ALLOWED_ORIGIN`. Prevents cross-origin abuse of the admin endpoints.
+- *Rate limiting* — unauthorized SMS senders get one reply, then are suppressed after 5 attempts. The `rateLimit.ts` module tracks attempts in DynamoDB so the counter survives Lambda cold starts.
+- *Lambda reserved concurrency* — capped at 10 to prevent DynamoDB write throttling under burst load. A DLQ captures any messages that exceed capacity for retry.
+
+**Scalability trade-offs:**
+
+- *Serverless by default* — Lambda + DynamoDB on-demand billing means the system costs essentially $0 at rest and scales automatically under load. The right trade-off for a community tool that may sit dormant for weeks between emergencies.
+- *SSE over WebSockets for shelter updates* — SSE is stateless per Lambda invocation, simpler to operate, and sufficient for one-way push. AppSync handles the bidirectional chat case where SSE falls short.
+- *Multi-table DynamoDB* — shelters, chat, and donations are in separate tables. Cleaner IAM policies, independent scaling, and no hot-partition risk from mixing high-write chat traffic with lower-write shelter records.
+- *Lambda bundle size* — `types/shelter.ts` (dashboard) and `types.ts` (lambda) are intentionally duplicated rather than shared via a package. Keeps the Lambda bundle lean and avoids a shared-package build step in the CDK pipeline.
+
+---
+
+### Learning Journey & What I'd Do Differently
+
+**What worked:**
+- Writing steering docs on day one. The 30 minutes it takes to write a solid `tech.md` pays back immediately and compounds across every subsequent interaction.
+- Spec before code. The Pinpoint pivot took less than a day because the spec absorbed the change cleanly — requirements updated, design updated, tasks updated, code followed.
+- Property-based testing for the parser. The `parse(formatConfirmation(record))` round-trip invariant caught edge cases in whitespace handling and priority serialization that unit tests would have missed.
+
+**What I'd do differently:**
+- Write the steering docs before writing a single line of code, not after the first round of generic output.
+- Spec the agentic AI loop earlier. The Bedrock Converse API with tool definitions is straightforward once you understand the pattern, but the conversation history management and tool result handling shape the component design in ways that are hard to refactor later.
+- Add the `post-task-test-runner` hook from the start. Running tests manually between tasks is easy to skip when you're moving fast. The hook removes that decision entirely.
+
+**Future plans:**
+- Full Pinpoint SMS activation once sandbox approval clears — the entire broadcast path is implemented and tested, the only blocker is the AWS account-level approval.
+- MCP integration for the Advocate — connecting to external systems like volunteer scheduling APIs or mapping services would make the tool genuinely useful for real shelter networks, and the current `TOOLS` array maps cleanly to MCP tool definitions.
+- Multi-shelter admin view — a coordinator dashboard that shows all shelters on a map with live capacity indicators, filterable by status and needs priority.
+- Offline-resilient SMS parsing — a fallback path that queues updates locally when DynamoDB is unavailable and replays on reconnect, important for disaster scenarios where AWS regional availability may be degraded.
 
 ---
 
