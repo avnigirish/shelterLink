@@ -5,7 +5,8 @@ import type { ChatMessage } from '@/types/shelter';
 
 const USE_MOCK = process.env['USE_MOCK_DATA'] === 'true';
 
-// Scripted mock alerts — fired at random intervals between 4s and 20s apart
+// Scripted mock alerts — fired at random intervals between 8s and 22s apart
+// 16 alerts across all shelters — all fire within ~5 minutes
 const MOCK_ALERT_SCRIPT: Array<{ shelterId: string; message: string }> = [
   {
     shelterId: 'shelter-001',
@@ -30,6 +31,46 @@ const MOCK_ALERT_SCRIPT: Array<{ shelterId: string; message: string }> = [
   {
     shelterId: 'shelter-401',
     message: '🧥 Winter coat donation confirmed — 15 coats arriving Friday morning',
+  },
+  {
+    shelterId: 'shelter-502',
+    message: '🚨 Capacity update: Miriam\'s Kitchen now FULL — redirecting new arrivals to Central Union Mission',
+  },
+  {
+    shelterId: 'shelter-301',
+    message: '📦 Hygiene kit donation incoming — 40 kits from local church, arriving Saturday 10am',
+  },
+  {
+    shelterId: 'shelter-102',
+    message: '🤝 Eva\'s Village: 3 volunteers confirmed for weekend meal service — thank you!',
+  },
+  {
+    shelterId: 'shelter-403',
+    message: '🚨 Arundel House at capacity — warm clothing still urgently needed, drop-off accepted at side entrance',
+  },
+  {
+    shelterId: 'shelter-202',
+    message: '📣 Covenant House NY: school supply drive ends Friday — backpacks and notebooks most needed',
+  },
+  {
+    shelterId: 'shelter-303',
+    message: '🚨 ACTS shelter FULL — families with children being referred to HomeFront in Lawrenceville',
+  },
+  {
+    shelterId: 'shelter-503',
+    message: '🤝 N Street Village: gift card drive raised $400 this week — residents grateful',
+  },
+  {
+    shelterId: 'shelter-104',
+    message: '🚨 HomeFront Family Shelter: baby formula critically low — any amount helps',
+  },
+  {
+    shelterId: 'shelter-402',
+    message: '📦 Montgomery County shelter: diaper donation from community drive arriving Monday morning',
+  },
+  {
+    shelterId: 'shelter-302',
+    message: '📣 HomeAgain Richmond: work boot drive underway — sizes 9–12 most needed, drop off at front desk',
   },
 ];
 
@@ -67,11 +108,11 @@ export async function GET(_req: NextRequest) {
             .map((m) => m.timestamp)
         );
 
-        // Fire scripted alerts at random intervals (4–20s apart), chained sequentially
+        // Fire scripted alerts at random intervals (8–22s apart), chained sequentially
         const scriptTimers: ReturnType<typeof setTimeout>[] = [];
         let accumulated = 0;
         for (const { shelterId, message } of MOCK_ALERT_SCRIPT) {
-          accumulated += randomDelay(4_000, 20_000);
+          accumulated += randomDelay(8_000, 22_000);
           const delay = accumulated;
           scriptTimers.push(
             setTimeout(() => {

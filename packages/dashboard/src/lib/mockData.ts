@@ -9,7 +9,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'Helping Hands of Springfield',
     address: '2200 Shale St, Springfield, IL 62703',
     phone: '(217) 522-0048',
-    website: 'https://www.helpinghandsspringfield.org',
+    website: 'https://www.helpinghandsofspringfield.org',
     state: 'IL',
     beds: 14, capacity: 40, status: 'OPEN',
     needsList: [
@@ -25,7 +25,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'Contact Ministries',
     address: '1100 E Adams St, Springfield, IL 62703',
     phone: '(217) 753-3939',
-    website: 'https://www.contactministries.org',
+    website: 'https://contactministries.com',
     state: 'IL',
     beds: 0, capacity: 30, status: 'FULL',
     needsList: [
@@ -58,7 +58,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'Covenant House New Jersey',
     address: '330 Washington St, Newark, NJ 07102',
     phone: '(973) 621-8705',
-    website: 'https://www.covenanthouseni.org',
+    website: 'https://covenanthousenj.org',
     state: 'NJ',
     beds: 18, capacity: 50, status: 'OPEN',
     needsList: [
@@ -224,7 +224,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'Richmond Rescue Mission',
     address: '2 W Grace St, Richmond, VA 23220',
     phone: '(804) 648-2748',
-    website: 'https://www.rrmhope.org',
+    website: 'https://www.homeagainrichmond.org',
     state: 'VA',
     beds: 35, capacity: 90, status: 'OPEN',
     needsList: [
@@ -275,7 +275,7 @@ export const MOCK_SHELTERS: ShelterRecord[] = [
     name: 'Montgomery County Family Shelter',
     address: '8900 Georgia Ave, Silver Spring, MD 20910',
     phone: '(240) 777-4000',
-    website: 'https://www.montgomerycountymd.gov/HHS-Program/RSS/shelter.html',
+    website: 'https://www.montgomerycountymd.gov/HHS-Program/Program.aspx?id=SNHS/SNHSShelterSvcs-p744.html',
     state: 'MD',
     beds: 15, capacity: 50, status: 'OPEN',
     needsList: [

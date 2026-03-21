@@ -167,43 +167,87 @@ shelterlink/
 ├── packages/
 │   ├── lambda/          # Update_Processor — TypeScript, Node.js 20.x
 │   │   └── src/
-│   │       ├── handler.ts          # Lambda Function URL + SQS handler
-│   │       ├── parser.ts           # SMS-format body parser
-│   │       ├── prettyPrinter.ts    # Confirmation message formatter
-│   │       ├── registry.ts         # Phone → shelter lookup + maskPhone()
-│   │       ├── rateLimit.ts        # Unauthorized attempt suppression
-│   │       ├── streamHandler.ts    # DynamoDB Streams → SSE push
-│   │       └── types.ts            # Shared Lambda types
+│   │       ├── handler.ts            # Lambda Function URL + SQS handler
+│   │       ├── parser.ts             # SMS-format body parser
+│   │       ├── prettyPrinter.ts      # Confirmation message formatter
+│   │       ├── registry.ts           # Phone → shelter lookup + maskPhone()
+│   │       ├── rateLimit.ts          # Unauthorized attempt suppression
+│   │       ├── streamHandler.ts      # DynamoDB Streams → SSE push + broadcast fan-out
+│   │       ├── broadcastService.ts   # SMS alert trigger evaluation + Pinpoint fan-out
+│   │       ├── subscription.ts       # STOP/START opt-out/in helpers
+│   │       └── types.ts              # Shared Lambda types
 │   ├── dashboard/       # Next.js 14 App Router, Tailwind CSS
 │   │   └── src/
 │   │       ├── app/
-│   │       │   ├── page.tsx                    # SSR home — shelter list
-│   │       │   ├── shelter/[id]/page.tsx        # SSR detail — needs, inventory, chat
-│   │       │   ├── donate/[shelterId]/page.tsx  # Donation pledge form
-│   │       │   ├── login/page.tsx               # GitHub OAuth login
-│   │       │   └── admin/page.tsx               # Admin — registry + inventory
+│   │       │   ├── page.tsx                        # SSR home — shelter list
+│   │       │   ├── shelter/[id]/page.tsx            # SSR detail — needs, inventory, chat, alerts
+│   │       │   ├── donate/[shelterId]/page.tsx      # Donation pledge form
+│   │       │   ├── supply-drive/page.tsx            # Community supply drive — aggregated needs
+│   │       │   ├── login/page.tsx                   # GitHub OAuth login
+│   │       │   ├── admin/page.tsx                   # Admin — registry + inventory + donations
+│   │       │   └── api/
+│   │       │       ├── updates/route.ts             # SSE endpoint — real-time shelter updates
+│   │       │       ├── advocate/route.ts            # Bedrock agentic AI — PledgeTool + AlertTool
+│   │       │       ├── alerts/route.ts              # SSE — community activity feed
+│   │       │       ├── alerts/subscribe/route.ts    # POST — subscribe phone to shelter alerts
+│   │       │       ├── alerts/unsubscribe/route.ts  # POST — unsubscribe phone from alerts
+│   │       │       ├── chat/[shelterId]/route.ts    # POST — community chat messages
+│   │       │       ├── donations/route.ts           # GET/POST — donation pledges
+│   │       │       └── admin/shelters/              # Admin CRUD — shelter registry
 │   │       ├── components/
-│   │       │   ├── ShelterList.tsx
-│   │       │   ├── NeedsFilter.tsx
-│   │       │   ├── CommunityChat.tsx            # AppSync subscription chat
-│   │       │   ├── InventoryPanel.tsx           # Inventory display + admin edit
-│   │       │   ├── DonationForm.tsx             # Pledge form
-│   │       │   └── AddShelterForm.tsx
-│   │       └── lib/
-│   │           ├── db.ts           # DynamoDB data-access
-│   │           ├── auth.ts         # NextAuth config
-│   │           ├── registry.ts     # Shelter registry CRUD
-│   │           └── mockData.ts     # Local dev mock data (Springfield, IL)
+│   │       │   ├── ShelterList.tsx           # Public shelter list with SSE updates
+│   │       │   ├── NeedsFilter.tsx           # Priority filter for needs list
+│   │       │   ├── CommunityChat.tsx         # AppSync subscription chat
+│   │       │   ├── AdvocateChat.tsx          # AI Community Advocate chat panel
+│   │       │   ├── AlertSubscribeForm.tsx    # SMS alert opt-in/out form
+│   │       │   ├── AlertToast.tsx            # Real-time alert toast notifications
+│   │       │   ├── InventoryPanel.tsx        # Inventory display + admin edit
+│   │       │   ├── DonationForm.tsx          # Pledge form
+│   │       │   ├── MarkDeliveredButton.tsx   # Admin — mark donation delivered
+│   │       │   ├── Header.tsx                # Site header + nav
+│   │       │   ├── InfoPanel.tsx             # Shelter info sidebar
+│   │       │   ├── AddShelterForm.tsx        # Admin — add shelter
+│   │       │   └── RemoveShelterButton.tsx   # Admin — remove shelter
+│   │       ├── hooks/
+│   │       │   └── useShelterUpdates.ts      # React hook — consumes SSE stream
+│   │       ├── lib/
+│   │       │   ├── db.ts                     # DynamoDB data-access
+│   │       │   ├── auth.ts                   # NextAuth config (GitHub OAuth)
+│   │       │   ├── registry.ts               # Shelter registry CRUD
+│   │       │   ├── donations.ts              # Donation data-access
+│   │       │   ├── mockData.ts               # Local dev mock shelters (real US cities)
+│   │       │   ├── mockDonations.ts          # Mock donation records
+│   │       │   ├── mockUsers.ts              # Mock community member profiles
+│   │       │   ├── mockChatStore.ts          # In-memory chat store (mock mode)
+│   │       │   └── mockShelterStore.ts       # In-memory shelter store (mock mode)
+│   │       └── types/
+│   │           └── shelter.ts                # Shared dashboard types
 │   └── infra/           # AWS CDK v2 stack
 │       └── lib/
-│           └── shelter-link-stack.ts
+│           └── shelter-link-stack.ts         # DynamoDB, SNS, SQS, Lambda, Pinpoint, IAM
 ├── .kiro/
-│   └── specs/
-│       └── shelter-link/
-│           ├── requirements.md
-│           ├── system_design.md
-│           ├── schema.md           # DynamoDB table schemas
-│           └── tasks.md
+│   ├── specs/
+│   │   ├── shelter-link/             # Core system spec
+│   │   │   ├── requirements.md
+│   │   │   ├── system_design.md
+│   │   │   ├── schema.md
+│   │   │   └── tasks.md
+│   │   ├── sms-broadcast-alerts/     # SMS alerts feature spec
+│   │   │   ├── requirements.md
+│   │   │   ├── design.md
+│   │   │   └── tasks.md
+│   │   └── community-activity-feed/  # Activity feed feature spec
+│   │       ├── requirements.md
+│   │       ├── design.md
+│   │       └── tasks.md
+│   ├── steering/                     # AI assistant context (tech, structure, product)
+│   └── hooks/                        # Kiro automation hooks
+│       ├── environment-sync          # Validates env vars on .env.local save
+│       ├── mock-to-prod-toggle       # Toggles mock/prod mode
+│       ├── react-quality-a11y-audit  # Audits .tsx files on save
+│       └── post-task-test-runner     # Runs tests after each spec task completes
+├── docs/
+│   └── screenshot-dashboard.png
 └── README.md
 ```
 
