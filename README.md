@@ -43,6 +43,7 @@ ShelterLink includes an AI-powered Community Advocate built on Amazon Bedrock (A
 - Matches your donation items to shelters with those items listed as CRITICAL or HIGH priority needs — using live DynamoDB data
 - Summarizes what's happening at a specific shelter based on its current needs and inventory
 - Guides new users through the Build for Impact mission and the ShelterLink workflow
+- On shelter detail pages, shows color-coded quick-select chips for the shelter's active needs — click a chip to pre-fill the input instead of typing
 
 **Tone:** Empathetic, grounded, and action-oriented. Every response ends with a specific next step. Responses render with full markdown formatting (bold, lists, etc.).
 
@@ -157,6 +158,8 @@ When the Advocate agent processes a donation pledge, it automatically posts a no
 | Community Activity Feed | Pledge notifications auto-posted to shelter chat by the Advocate agent |
 | Admin Panel | GitHub OAuth-gated registry management, inventory editing, and donation oversight |
 | SMS Broadcast Alerts | Outbound SMS notifications via Pinpoint when shelters go FULL/CLOSED or gain CRITICAL needs — volunteers and donors subscribe per-shelter via the shelter detail page; STOP/START keyword opt-out/in supported via inbound SMS |
+| Donation Form Needs Dropdown | Pledge form pre-populates a dropdown of the shelter's current unfulfilled needs (with priority labels); donors can also type a custom item. Deep-linkable via `?item=<item>` from the Supply Drive page. |
+| Advocate Quick-Select Chips | On shelter detail pages, the AI Advocate chat panel shows color-coded chips for the shelter's active needs (red = CRITICAL, orange = HIGH). Clicking a chip pre-fills the input so donors don't have to type. |
 
 ---
 

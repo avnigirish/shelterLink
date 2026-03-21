@@ -1,11 +1,20 @@
 'use client';
 
 import { useState } from 'react';
-import type { DonationItem } from '@/types/shelter';
+import type { DonationItem, NeedsItem, Priority } from '@/types/shelter';
+
+const PRIORITY_BADGE: Record<Priority, string> = {
+  CRITICAL: 'text-red-600 dark:text-red-400',
+  HIGH: 'text-orange-600 dark:text-orange-400',
+  MEDIUM: 'text-yellow-600 dark:text-yellow-400',
+  LOW: 'text-gray-500 dark:text-gray-400',
+};
 
 interface Props {
   shelterId: string;
   shelterName: string;
+  suggestedNeeds?: NeedsItem[];
+  preselectedItem?: string;
 }
 
 interface FormItem {
@@ -13,10 +22,10 @@ interface FormItem {
   quantity: number;
 }
 
-export function DonationForm({ shelterId, shelterName }: Props) {
+export function DonationForm({ shelterId, shelterName, suggestedNeeds = [], preselectedItem = '' }: Props) {
   const [donorName, setDonorName] = useState('');
   const [donorEmail, setDonorEmail] = useState('');
-  const [items, setItems] = useState<FormItem[]>([{ item: '', quantity: 1 }]);
+  const [items, setItems] = useState<FormItem[]>([{ item: preselectedItem, quantity: 1 }]);
   const [submitting, setSubmitting] = useState(false);
   const [pledgeId, setPledgeId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -140,17 +149,53 @@ export function DonationForm({ shelterId, shelterName }: Props) {
         <div className="space-y-2">
           {items.map((it, index) => (
             <div key={index} className="flex gap-2 items-center">
-              <input
-                type="text"
-                value={it.item}
-                onChange={(e) => updateItem(index, 'item', e.target.value)}
-                placeholder="Item name (e.g. blankets)"
-                className="flex-1 border border-surface-border dark:border-dark-border rounded px-3 py-2 text-sm
-                  bg-surface-DEFAULT dark:bg-dark-elevated text-text-DEFAULT dark:text-dark-text
-                  placeholder:text-text-faint dark:placeholder:text-dark-subtle
-                  focus:outline-none focus:ring-2 focus:ring-brand-500"
-                aria-label={`Item ${index + 1} name`}
-              />
+              {suggestedNeeds.length > 0 ? (
+                <select
+                  value={it.item}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    updateItem(index, 'item', val === '__custom__' ? '' : val);
+                  }}
+                  className="flex-1 border border-surface-border dark:border-dark-border rounded px-3 py-2 text-sm
+                    bg-surface-DEFAULT dark:bg-dark-elevated text-text-DEFAULT dark:text-dark-text
+                    focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  aria-label={`Item ${index + 1} name`}
+                >
+                  <option value="">Select an item\u2026</option>
+                  <optgroup label="Current needs">
+                    {suggestedNeeds.map((n) => (
+                      <option key={n.item} value={n.item}>
+                        {n.item} \u2014 {n.priority.charAt(0) + n.priority.slice(1).toLowerCase()} priority
+                      </option>
+                    ))}
+                  </optgroup>
+                  <option value="__custom__">Other (type below)</option>
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={it.item}
+                  onChange={(e) => updateItem(index, 'item', e.target.value)}
+                  placeholder="Item name (e.g. blankets)"
+                  className="flex-1 border border-surface-border dark:border-dark-border rounded px-3 py-2 text-sm
+                    bg-surface-DEFAULT dark:bg-dark-elevated text-text-DEFAULT dark:text-dark-text
+                    placeholder:text-text-faint dark:placeholder:text-dark-subtle
+                    focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  aria-label={`Item ${index + 1} name`}
+                />
+              )}
+              {suggestedNeeds.length > 0 && it.item === '' && (
+                <input
+                  type="text"
+                  placeholder="Describe item"
+                  onChange={(e) => updateItem(index, 'item', e.target.value)}
+                  className="flex-1 border border-surface-border dark:border-dark-border rounded px-3 py-2 text-sm
+                    bg-surface-DEFAULT dark:bg-dark-elevated text-text-DEFAULT dark:text-dark-text
+                    placeholder:text-text-faint dark:placeholder:text-dark-subtle
+                    focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  aria-label={`Item ${index + 1} custom name`}
+                />
+              )}
               <input
                 type="number"
                 min={1}
@@ -175,6 +220,19 @@ export function DonationForm({ shelterId, shelterName }: Props) {
             </div>
           ))}
         </div>
+
+        {suggestedNeeds.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-3 text-xs">
+            {(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as Priority[])
+              .filter((p) => suggestedNeeds.some((n) => n.priority === p))
+              .map((p) => (
+                <span key={p} className={PRIORITY_BADGE[p]}>
+                  \u25cf {p.charAt(0) + p.slice(1).toLowerCase()} priority
+                </span>
+              ))}
+          </div>
+        )}
+
         <button
           type="button"
           onClick={addItem}
@@ -198,7 +256,7 @@ export function DonationForm({ shelterId, shelterName }: Props) {
           disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1
           dark:focus:ring-offset-dark-surface"
       >
-        {submitting ? 'Submitting…' : 'Submit Pledge'}
+        {submitting ? 'Submitting\u2026' : 'Submit Pledge'}
       </button>
     </form>
   );

@@ -14,12 +14,18 @@ const STARTERS = [
   'How can I help as a first-time volunteer?',
 ];
 
+interface NeedChip {
+  item: string;
+  priority: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+}
+
 interface Props {
   shelterId?: string;
   context?: 'home' | 'shelter';
+  needs?: NeedChip[];
 }
 
-export function AdvocateChat({ shelterId, context = 'home' }: Props) {
+export function AdvocateChat({ shelterId, context = 'home', needs = [] }: Props) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -264,6 +270,32 @@ export function AdvocateChat({ shelterId, context = 'home' }: Props) {
             ))}
             <div ref={bottomRef} />
           </div>
+
+          {/* Quick-select need chips */}
+          {needs.length > 0 && !streaming && (
+            <div className="px-3 pt-2 pb-1 border-t border-surface-border dark:border-dark-border">
+              <p className="text-xs text-text-faint dark:text-dark-subtle mb-1.5">This shelter needs:</p>
+              <div className="flex flex-wrap gap-1.5">
+                {needs.slice(0, 6).map((n) => (
+                  <button
+                    key={n.item}
+                    type="button"
+                    onClick={() => setInput(`I have ${n.item} to donate — where should I bring them?`)}
+                    className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-colors
+                      focus:outline-none focus:ring-2 focus:ring-brand-500
+                      ${n.priority === 'CRITICAL'
+                        ? 'border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40'
+                        : n.priority === 'HIGH'
+                        ? 'border-orange-300 dark:border-orange-700 text-orange-700 dark:text-orange-300 bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 dark:hover:bg-orange-900/40'
+                        : 'border-surface-border dark:border-dark-border text-text-muted dark:text-dark-muted bg-surface-subtle dark:bg-dark-elevated hover:border-brand-300 dark:hover:border-brand-600'
+                      }`}
+                  >
+                    {n.item}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Input */}
           <form

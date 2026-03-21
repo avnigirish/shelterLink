@@ -3,9 +3,18 @@ import Link from 'next/link';
 import { getShelterById } from '@/lib/db';
 import { DonationForm } from '@/components/DonationForm';
 
-export default async function DonatePage({ params }: { params: { shelterId: string } }) {
+export default async function DonatePage({
+  params,
+  searchParams,
+}: {
+  params: { shelterId: string };
+  searchParams?: { item?: string };
+}) {
   const shelter = await getShelterById(params.shelterId);
   if (!shelter) return notFound();
+
+  const activeNeeds = shelter.needsList.filter((n) => !n.fulfilled);
+  const preselectedItem = searchParams?.item ?? '';
 
   return (
     <div className="max-w-lg">
@@ -21,7 +30,12 @@ export default async function DonatePage({ params }: { params: { shelterId: stri
         Donating to <strong>{shelter.name}</strong>
       </p>
 
-      <DonationForm shelterId={params.shelterId} shelterName={shelter.name} />
+      <DonationForm
+        shelterId={params.shelterId}
+        shelterName={shelter.name}
+        suggestedNeeds={activeNeeds}
+        preselectedItem={preselectedItem}
+      />
     </div>
   );
 }

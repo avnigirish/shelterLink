@@ -90,7 +90,7 @@ export default async function ShelterDetailPage({ params }: { params: { id: stri
           </Link>
         </div>
       </div>
-      <AdvocateChat shelterId={params.id} context="shelter" />
+      <AdvocateChat shelterId={params.id} context="shelter" needs={activeNeeds} />
     </>
   );
 }
